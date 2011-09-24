@@ -8,7 +8,7 @@ lib_LTLIBRARIES = libhardhat.la
 libhardhat_la_SOURCES = src/hashtable.c src/hashtable.h src/layout.h src/maker.c src/maker.h src/reader.c src/reader.h
 libhardhat_la_LDFLAGS = -Wl,--version-script,$(srcdir)/libhardhat.ver
 
-hh_HEADERS = src/layout.h src/reader.h src/hashtable.h
+hh_HEADERS = src/layout.h src/reader.h src/hashtable.h src/maker.h
 hhdir = $(pkgincludedir)
 
 EXTRA_DIST = makedist libhardhat.ver

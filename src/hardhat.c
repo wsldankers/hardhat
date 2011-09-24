@@ -24,19 +24,20 @@ int main(int argc, char **argv) {
 
 	for(i = 2; i < argc; i++) {
 		c = hardhat_cursor(buf, argv[i], (uint16_t)strlen(argv[i]));
-		while(hardhat_fetch(c, true)) {
-			cc = hardhat_cursor(buf, c->key, c->keylen);
-#if 0
-			if(!cc || !cc->key) {
-				printf("[");
-				fwrite(c->key, 1, c->keylen, stdout);
-				printf("] → [");
-				fwrite(c->data, 1, c->datalen, stdout);
-				printf("]\n");
+		if(c && c->data) {
+			while(hardhat_fetch(c, true)) {
+				cc = hardhat_cursor(buf, c->key, c->keylen);
+				if(!cc || !cc->key) {
+					printf("[");
+					fwrite(c->key, 1, c->keylen, stdout);
+					printf("] → [");
+					fwrite(c->data, 1, c->datalen, stdout);
+					printf("]\n");
+				}
+				hardhat_cursor_free(cc);
 			}
-#endif
-			free(cc);
 		}
+		hardhat_cursor_free(c);
 	}
 
 	return 0;

@@ -121,20 +121,25 @@ export int hardhat_cmp(const void *a, size_t al, const void *b, size_t bl) {
 		if(ap) {
 			if(!bp)
 				return 1;
+			ac = (size_t)(ap - as);
+			bc = (size_t)(bp - bs);
 		} else {
 			if(bp)
 				return -1;
+			ac = (size_t)(ae - as);
+			bc = (size_t)(be - bs);
 		}
 
-		ac = (size_t)(ap - as);
-		bc = (size_t)(bp - bs);
 		c = memcmp(as, bs, ac < bc ? ac : bc);
 		if(c)
 			return c;
+
 		if(ac < bc)
 			return -1;
 		else if(ac > bc)
 			return 1;
+		else if(!ap)
+			return 0;
 
 		as = ap + 1;
 		bs = bp + 1;
@@ -449,7 +454,7 @@ static int qsort_directory_cmp(const void *a, const void *b) {
 		qsort_data = NULL;
 		return 0;
 	}
-	return hardhat_cmp(ar + 6, u16read(ar), br + 6, u16read(br));
+	return hardhat_cmp(ar + 6, u16read(ar + 4), br + 6, u16read(br + 4));
 }
 
 static int qsort_hash_cmp(const void *a, const void *b) {

@@ -94,11 +94,10 @@ static int hhr_cmp(const void *a, size_t al, const void *b, size_t bl) {
 	return al < bl ? -1 : al > bl ? 1 : 0;
 }
 
-#define CURSOR_FIRST (UINT32_MAX-1)
-#define CURSOR_LAST (UINT32_MAX)
+#define CURSOR_NONE (UINT32_MAX)
 
 static const hardhat_cursor_t hardhat_cursor_0 = {
-	.cur = CURSOR_FIRST
+	.cur = CURSOR_NONE
 };
 
 static uint32_t hhc_find(hardhat_cursor_t *c, bool recursive) {
@@ -116,7 +115,7 @@ static uint32_t hhc_find(hardhat_cursor_t *c, bool recursive) {
 	directory = (const uint32_t *)(buf + sb->directory_start);
 
 	if(!upper)
-		return CURSOR_LAST;
+		return CURSOR_NONE;
 
 	for(;;) {
 		cur = (uint32_t)(((uint64_t)lower + (uint64_t)upper) / UINT64_C(2));
@@ -130,14 +129,14 @@ static uint32_t hhc_find(hardhat_cursor_t *c, bool recursive) {
 			if(d <= 0) {
 				cur++;
 				if(cur >= sb->entries)
-					return CURSOR_LAST;
+					return CURSOR_NONE;
 				rec = buf + directory[cur];
 			}
 			keylen = u16read(rec + 4);
 			if(keylen < c->prefixlen
 			|| memcmp(rec + 6, c->prefix, c->prefixlen)
 			|| (recursive && memchr(rec + 6 + c->prefixlen, '/', (size_t)(keylen - c->prefixlen))))
-				return CURSOR_LAST;
+				return CURSOR_NONE;
 			return cur;
 		}
 	}
@@ -246,7 +245,29 @@ export bool hardhat_fetch(hardhat_cursor_t *c, bool recursive) {
 	const char *rec, *buf;
 	uint16_t keylen;
 
-	if(c->cur == CURSOR_LAST) {
+	cur = c->cur;
+	sb = c->hardhat;
+	buf = c->hardhat;
+	directory = (const uint32_t *)(buf + sb->directory_start);
+
+	if(cur == CURSOR_NONE) {
+		cur = hhc_find(c, recursive);
+	} else {
+		cur++;
+		if(cur < sb->entries) {
+			rec = buf + directory[cur];
+			keylen = u16read(rec + 4);
+			if(keylen < c->prefixlen
+			|| memcmp(rec + 6, c->prefix, c->prefixlen)
+			|| (!recursive && memchr(rec + 6 + c->prefixlen, '/', (size_t)(keylen - c->prefixlen))))
+				cur = CURSOR_NONE;
+		} else {
+			cur = CURSOR_NONE;
+		}
+	}
+
+	if(cur == CURSOR_NONE) {
+		c->cur = cur;
 		c->key = NULL;
 		c->data = NULL;
 		c->keylen = 0;
@@ -254,31 +275,12 @@ export bool hardhat_fetch(hardhat_cursor_t *c, bool recursive) {
 		return false;
 	}
 
-	if(c->cur == CURSOR_FIRST)
-		c->cur = hhc_find(c, recursive);
-
-	sb = c->hardhat;
-	buf = c->hardhat;
-	directory = (const uint32_t *)(buf + sb->directory_start);
-	cur = c->cur++;
-
 	rec = buf + directory[cur];
+	c->cur = cur;
 	c->key = rec + 6;
 	c->keylen = u16read(rec + 4);
 	c->data = rec + 6 + c->keylen;
 	c->datalen = u32read(rec);
-
-	if(c->cur < sb->entries) {
-		rec = buf + directory[c->cur];
-		keylen = u16read(rec + 4);
-		if(keylen < c->prefixlen
-		|| memcmp(rec + 6, c->prefix, c->prefixlen)
-		|| (!recursive && memchr(rec + 6 + c->prefixlen, '/', (size_t)(keylen - c->prefixlen))))
-			c->cur = CURSOR_LAST;
-	} else {
-		c->cur = CURSOR_LAST;
-	}
-
 	return true;
 }
 
