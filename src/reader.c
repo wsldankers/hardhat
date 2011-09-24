@@ -207,6 +207,9 @@ static void hhm_hash_find(hardhat_cursor_t *c) {
 		keylen = u16read(rec + 4);
 		if(keylen == prefixlen && !memcmp(rec + 6, c->prefix, prefixlen)) {
 			c->key = rec + 6;
+			c->keylen = keylen;
+			c->data = rec + 6 + keylen;
+			c->datalen = u32read(rec);
 			return;
 		}
 	}
