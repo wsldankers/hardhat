@@ -17,6 +17,7 @@ typedef struct hardhat_cursor {
 } hardhat_cursor_t;
 
 void *hardhat_open(const char *filename);
+void hardhat_close(void *hardhat);
 hardhat_cursor_t *hardhat_cursor(const void *hardhat, const void *prefix, uint16_t prefixlen);
 bool hardhat_fetch(hardhat_cursor_t *c, bool recursive);
 void hardhat_cursor_free(hardhat_cursor_t *c);

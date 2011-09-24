@@ -1,3 +1,5 @@
+#include "config.h"
+
 #include <stdio.h>
 #include <stdbool.h>
 #include <stdarg.h>
@@ -16,7 +18,9 @@
 #include "layout.h"
 #include "reader.h"
 
-void *hardhat_open(const char *filename) {
+#define export __attribute__((visibility("default")))
+
+export void *hardhat_open(const char *filename) {
 	void *buf;
 	int fd, err;
 	struct stat st;
@@ -55,6 +59,16 @@ void *hardhat_open(const char *filename) {
 	}
 
 	return buf;
+}
+
+export void hardhat_close(void *buf) {
+	struct hardhat_superblock *sb;
+
+	if(!buf)
+		return;
+
+	sb = buf;
+	munmap(buf, (size_t)sb->filesize);
 }
 
 static uint16_t u16read(const void *buf) {
@@ -198,7 +212,7 @@ static void hhm_hash_find(hardhat_cursor_t *c) {
 	}
 }
 
-hardhat_cursor_t *hardhat_cursor(const void *hardhat, const void *prefix, uint16_t prefixlen) {
+export hardhat_cursor_t *hardhat_cursor(const void *hardhat, const void *prefix, uint16_t prefixlen) {
 	hardhat_cursor_t *c;
 
 	if(!hardhat || memcmp(hardhat, HARDHAT_MAGIC, strlen(HARDHAT_MAGIC))) {
@@ -222,7 +236,7 @@ hardhat_cursor_t *hardhat_cursor(const void *hardhat, const void *prefix, uint16
 	return c;
 }
 
-bool hardhat_fetch(hardhat_cursor_t *c, bool recursive) {
+export bool hardhat_fetch(hardhat_cursor_t *c, bool recursive) {
 	const struct hardhat_superblock *sb;
 	uint32_t cur;
 	const uint32_t *directory;
@@ -265,6 +279,6 @@ bool hardhat_fetch(hardhat_cursor_t *c, bool recursive) {
 	return true;
 }
 
-void hardhat_cursor_free(hardhat_cursor_t *c) {
+export void hardhat_cursor_free(hardhat_cursor_t *c) {
 	free(c);
 }

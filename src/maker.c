@@ -1,3 +1,5 @@
+#include "config.h"
+
 #include <stdio.h>
 #include <stdbool.h>
 #include <stdarg.h>
@@ -13,6 +15,8 @@
 #include "maker.h"
 #include "hashtable.h"
 #include "layout.h"
+
+#define export __attribute__((visibility("default")))
 
 struct hardhat_maker {
 	FILE *db;
@@ -33,7 +37,7 @@ static const hardhat_maker_t hardhat_maker_0 = {
 	.window = MAP_FAILED
 };
 
-const char *hardhat_maker_error(hardhat_maker_t *hhm) {
+export const char *hardhat_maker_error(hardhat_maker_t *hhm) {
 	return hhm
 		? hhm->error
 			? hhm->error
@@ -41,7 +45,7 @@ const char *hardhat_maker_error(hardhat_maker_t *hhm) {
 		: strerror(errno);
 }
 
-bool hardhat_maker_fatal(hardhat_maker_t *hhm) {
+export bool hardhat_maker_fatal(hardhat_maker_t *hhm) {
 	return hhm ? hhm->failed : true;
 }
 
@@ -52,7 +56,7 @@ bool hardhat_maker_fatal(hardhat_maker_t *hhm) {
 	- remove occurrences of .
 	- resolve occurrences of ..
 */
-size_t hardhat_normalize(uint8_t *dst, const uint8_t *src, size_t size) {
+export size_t hardhat_normalize(uint8_t *dst, const uint8_t *src, size_t size) {
 	uint8_t *cur, *end;
 	const uint8_t *sep, *nul;
 	size_t len;
@@ -96,7 +100,7 @@ size_t hardhat_normalize(uint8_t *dst, const uint8_t *src, size_t size) {
 	- paths are sorted by the number of slashes
 	- if that number is equal, do a standard string comparison
 */
-int hardhat_cmp(const void *a, size_t al, const void *b, size_t bl) {
+export int hardhat_cmp(const void *a, size_t al, const void *b, size_t bl) {
 	const char *as, *bs, *ap, *bp, *ae, *be;
 	size_t ac, bc;
 	int c;
@@ -186,7 +190,7 @@ static void hhm_set_error(hardhat_maker_t *hhm, const char *fmt, ...) {
 	}
 }
 
-hardhat_maker_t *hardhat_maker_new(const char *filename) {
+export hardhat_maker_t *hardhat_maker_new(const char *filename) {
 	hardhat_maker_t *hhm;
 	int err;
 
@@ -294,7 +298,7 @@ static const uint8_t *hhm_getrec(hardhat_maker_t *hhm, uint32_t off) {
 	return hhm->window + off;
 }
 
-bool hardhat_maker_add(hardhat_maker_t *hhm, const void *key, uint16_t keylen, const void *data, uint32_t datalen) {
+export bool hardhat_maker_add(hardhat_maker_t *hhm, const void *key, uint16_t keylen, const void *data, uint32_t datalen) {
 	size_t recsize, padsize;
 	static const char padding[4] = {0};
 	uint32_t cur, hash, hp, value;
@@ -384,7 +388,7 @@ bool hardhat_maker_add(hardhat_maker_t *hhm, const void *key, uint16_t keylen, c
 	return true;
 }
 
-bool hardhat_maker_parents(hardhat_maker_t *hhm, const void *data, uint32_t datalen) {
+export bool hardhat_maker_parents(hardhat_maker_t *hhm, const void *data, uint32_t datalen) {
 	struct hashtable *ht;
 	uint32_t cur, hp, hash, value;
 	const uint8_t *rec, *slash, *key;
@@ -465,7 +469,7 @@ static int qsort_hash_cmp(const void *a, const void *b) {
 	return am < bm ? -1 : am > bm ? 1 : 0;
 }
 
-bool hardhat_maker_finish(hardhat_maker_t *hhm) {
+export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 	FILE *db;
 	struct hashtable *ht;
 	struct hashentry *he;
@@ -572,7 +576,7 @@ bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 	return true;
 }
 
-void hardhat_maker_free(hardhat_maker_t *hhm) {
+export void hardhat_maker_free(hardhat_maker_t *hhm) {
 	if(!hhm)
 		return;
 	if(hhm->db)
