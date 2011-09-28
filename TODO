@@ -1,0 +1,7 @@
+- duplicaten gewoon negeren ipv overschrijven
+- offsets vergroten naar 64-bits:
+	hashes sorteren op volgorde van de keys waar ze (indirect) naar wijzen
+	door de hashes heenlopen, en voor elke hash:
+		de bijbehorende offset naar offset-output-buffer kopiëren
+		de hash naar de offset in dat output-buffer laten wijzen
+	de hashes weer sorteren, nu op hashwaarde

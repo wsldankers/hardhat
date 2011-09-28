@@ -23,7 +23,8 @@ struct hardhat_maker {
 	char *filename;
 	uint8_t *keybuf, *window;
 	size_t recsize, padsize, windowsize, recbufsize;
-	uint32_t off, recnum, *recbuf;
+	uint64_t off, *recbuf;
+	uint32_t recnum;
 	struct hashtable *hashtable;
 	bool failed, finished;
 	char *error;
@@ -163,15 +164,15 @@ static size_t pad4k(size_t x) {
 }
 
 static uint16_t u16read(const void *buf) {
-	uint16_t u;
-	memcpy(&u, buf, sizeof u);
-	return u;
+	return *(uint16_t *)buf;
 }
 
 static uint32_t u32read(const void *buf) {
-	uint32_t u;
-	memcpy(&u, buf, sizeof u);
-	return u;
+	return *(uint32_t *)buf;
+}
+
+static uint64_t u64read(const void *buf) {
+	return *(uint64_t *)buf;
 }
 
 static void hhm_set_error(hardhat_maker_t *hhm, const char *fmt, ...) {
@@ -278,11 +279,11 @@ static bool hhm_db_write(hardhat_maker_t *hhm, const void *buf, size_t len) {
 static bool hhm_db_append(hardhat_maker_t *hhm, const void *buf, size_t len) {
 	if(!hhm_db_write(hhm, buf, len))
 		return false;
-	hhm->off += (uint32_t)len;
+	hhm->off += len;
 	return true;
 }
 
-static const uint8_t *hhm_getrec(hardhat_maker_t *hhm, uint32_t off) {
+static const uint8_t *hhm_getrec(hardhat_maker_t *hhm, uint64_t off) {
 	if(hhm->windowsize < off) {
 		if(hhm->window != MAP_FAILED)
 			munmap(hhm->window, hhm->windowsize);
@@ -331,6 +332,31 @@ export bool hardhat_maker_add(hardhat_maker_t *hhm, const void *key, uint16_t ke
 	keylen = (uint16_t)hardhat_normalize(hhm->keybuf, key, keylen);
 	key = hhm->keybuf;
 
+	hash = calchash(key, (size_t)keylen);
+	ht = hhm->hashtable;
+	hp = hash % ht->size;
+	for(;;) {
+		value = ht->buf[hp].data;
+		if(value == EMPTYHASH) {
+			if(!addhash(ht, hash, hhm->recnum)) {
+				hhm->error = enomem;
+				hhm->failed = true;
+				return false;
+			}
+			break;
+		}
+
+		if(ht->buf[hp].hash == hash) {
+			old = hhm_getrec(hhm, hhm->recbuf[value]);
+			if(!old)
+				return false;
+			if(u16read(old + 4) == keylen && !memcmp(old + 6, key, keylen))
+				return true;
+		}
+		if(++hp >= ht->size)
+			hp = 0;
+	}
+
 	recsize = (size_t)6 + (size_t)keylen + (size_t)datalen;
 	padsize = pad4(recsize);
 
@@ -351,44 +377,17 @@ export bool hardhat_maker_add(hardhat_maker_t *hhm, const void *key, uint16_t ke
 	if(!hhm_db_append(hhm, padding, padsize - recsize))
 		return false;
 
-	hash = calchash(key, (size_t)keylen);
-	ht = hhm->hashtable;
-	hp = hash % ht->size;
-	for(;;) {
-		value = ht->buf[hp].data;
-		if(value == EMPTYHASH) {
-			if(!addhash(ht, hash, hhm->recnum)) {
-				hhm->error = enomem;
-				hhm->failed = true;
-				return false;
-			}
-
-			if(hhm->recnum == hhm->recbufsize) {
-				hhm->recbufsize *= 2;
-				buf = realloc(hhm->recbuf, hhm->recbufsize * sizeof *hhm->recbuf);
-				if(!buf) {
-					hhm->error = enomem;
-					hhm->failed = true;
-					return false;
-				}
-				hhm->recbuf = buf;
-			}
-			hhm->recbuf[hhm->recnum++] = cur;
-
-			break;
+	if(hhm->recnum == hhm->recbufsize) {
+		hhm->recbufsize *= 2;
+		buf = realloc(hhm->recbuf, hhm->recbufsize * sizeof *hhm->recbuf);
+		if(!buf) {
+			hhm->error = enomem;
+			hhm->failed = true;
+			return false;
 		}
-		if(ht->buf[hp].hash == hash) {
-			old = hhm_getrec(hhm, hhm->recbuf[value]);
-			if(!old)
-				return false;
-			if(u16read(old + 4) == keylen && !memcmp(old + 6, key, keylen)) {
-				hhm->recbuf[value] = cur;
-				break;
-			}
-		}
-		if(++hp >= ht->size)
-			hp = 0;
+		hhm->recbuf = buf;
 	}
+	hhm->recbuf[hhm->recnum++] = cur;
 
 	return true;
 }
@@ -397,7 +396,7 @@ export bool hardhat_maker_parents(hardhat_maker_t *hhm, const void *data, uint32
 	struct hashtable *ht;
 	uint32_t cur, hp, hash, value;
 	const uint8_t *rec, *slash, *key;
-	size_t keylen;
+	uint16_t keylen;
 
 	if(!hhm || hhm->failed || hhm->finished) {
 		errno = EINVAL;
@@ -413,26 +412,9 @@ export bool hardhat_maker_parents(hardhat_maker_t *hhm, const void *data, uint32
 		slash = memrchr(key, '/', u16read(rec + 4));
 		if(!slash)
 			continue;
-		keylen = (size_t)(slash - key);
-		hash = calchash((const void *)key, keylen);
-		hp = hash % ht->size;
-		for(;;) {
-			value = ht->buf[hp].data;
-			if(value == EMPTYHASH) {
-				if(!hardhat_maker_add(hhm, key, (uint16_t)keylen, data, datalen))
-					return false;
-				break;
-			}
-			if(ht->buf[hp].hash == hash) {
-				rec = hhm_getrec(hhm, hhm->recbuf[value]);
-				if(!rec)
-					return false;
-				if(u16read(rec + 4) == keylen && !memcmp(rec + 6, key, keylen))
-					break;
-			}
-			if(++hp >= ht->size)
-				hp = 0;
-		}
+		keylen = (uint16_t)(slash - key);
+		if(!hardhat_maker_add(hhm, key, keylen, data, datalen))
+			return false;
 	}
 
 	return true;
@@ -444,12 +426,12 @@ static int qsort_directory_cmp(const void *a, const void *b) {
 	const uint8_t *ar, *br;
 	if(!qsort_data)
 		return 0;
-	ar = hhm_getrec(qsort_data, u32read(a));
+	ar = hhm_getrec(qsort_data, u64read(a));
 	if(!ar) {
 		qsort_data = NULL;
 		return 0;
 	}
-	br = hhm_getrec(qsort_data, u32read(b));
+	br = hhm_getrec(qsort_data, u64read(b));
 	if(!br) {
 		qsort_data = NULL;
 		return 0;
@@ -478,7 +460,8 @@ export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 	FILE *db;
 	struct hashtable *ht;
 	struct hashentry *he;
-	uint32_t i, num, *dir;
+	uint32_t i, num;
+	uint64_t *dir;
 
 	if(!hhm || hhm->failed || hhm->finished) {
 		errno = EINVAL;
@@ -490,7 +473,7 @@ export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 
 	hhm->superblock.data_end = hhm->off;
 
-	hhm->off = (uint32_t)pad4k(hhm->off);
+	hhm->off = pad4k(hhm->off);
 	if(fseek(db, hhm->off, SEEK_SET) == -1) {
 		hhm_set_error(hhm, "seeking in %s failed: %m", hhm->filename);
 		hhm->failed = true;
@@ -514,7 +497,7 @@ export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 
 	hhm->superblock.hash_end = hhm->off;
 
-	hhm->off = (uint32_t)pad4k(hhm->off);
+	hhm->off = pad4k(hhm->off);
 	if(fseek(db, hhm->off, SEEK_SET) == -1) {
 		hhm_set_error(hhm, "seeking in %s failed: %m", hhm->filename);
 		hhm->failed = true;
@@ -537,7 +520,7 @@ export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 	memcpy(hhm->superblock.magic, HARDHAT_MAGIC, sizeof hhm->superblock.magic);
 	hhm->superblock.byteorder = UINT64_C(0x0123456789ABCDEF);
 	hhm->superblock.entries = num;
-	hhm->off = (uint32_t)pad4k(hhm->off);
+	hhm->off = pad4k(hhm->off);
 	hhm->superblock.filesize = hhm->off;
 	hhm->superblock.checksum = calchash((const void *)&hhm->superblock, sizeof hhm->superblock - 4);
 

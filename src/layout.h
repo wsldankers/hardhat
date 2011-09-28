@@ -10,11 +10,11 @@ struct hardhat_superblock {
 	uint64_t byteorder;
 	uint32_t version;
 	uint32_t entries;
-	uint32_t filesize;
-	uint32_t data_start, data_end;
-	uint32_t hash_start, hash_end;
-	uint32_t directory_start, directory_end;
-	char unused[4040];
+	uint64_t filesize;
+	uint64_t data_start, data_end;
+	uint64_t hash_start, hash_end;
+	uint64_t directory_start, directory_end;
+	char unused[4012];
 	uint32_t checksum;
 };
 
