@@ -69,27 +69,16 @@ static uint32_t nextorderprime(int order) {
 	return u;
 }
 
-#if 0
 uint32_t calchash(const uint8_t *key, size_t len) {
-	const uint8_t *end;
-	uint32_t hv = UINT32_C(5381);
-	end = key + len;
-	while(key < end)
-		hv = ((hv << 5) + hv) ^ *key++;
-	return hv;
-}
-#else
-uint32_t calchash(const uint8_t *key, size_t len) {
-    const uint8_t *e;
-    uint32_t h;
+	const uint8_t *e;
+	uint32_t h;
 
-    e = key + len;
-    for(h = 0; key < e; key++)
-        h = (h * UINT32_C(16777619)) ^ *key;
+	e = key + len;
+	for(h = 0; key < e; key++)
+		h = (h * UINT32_C(16777619)) ^ *key;
 
-    return h;
+	return h;
 }
-#endif
 
 static void addhash_raw(struct hashtable *ht, uint32_t hash, uint32_t data) {
 	struct hashentry *buf;

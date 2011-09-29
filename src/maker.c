@@ -499,7 +499,6 @@ export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 
 	hhm->superblock.directory_end = hhm->off;
 
-	qsort_data = hhm;
 	qsort(ht->buf, num, sizeof *ht->buf, qsort_hash_cmp);
 	if(!qsort_data) {
 		hhm->failed = true;
