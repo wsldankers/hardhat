@@ -41,7 +41,7 @@ export void *hardhat_open(const char *filename) {
 		return NULL;
 	}
 
-	buf = mmap(NULL, (size_t)st.st_size, PROT_READ, MAP_SHARED, fd, 0);
+	buf = mmap(NULL, (size_t)st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
 	err = errno;
 	close(fd);
 	if(buf == MAP_FAILED) {
@@ -61,6 +61,22 @@ export void *hardhat_open(const char *filename) {
 	}
 
 	return buf;
+}
+
+export void hardhat_precache(void *buf, bool data) {
+	struct hardhat_superblock *sb;
+
+	if(!buf)
+		return;
+
+	sb = buf;
+
+	if(data) {
+		madvise(buf, sb->filesize, MADV_WILLNEED);
+	} else {
+		madvise((uint8_t *)buf + sb->hash_start, sb->hash_end - sb->hash_start, MADV_WILLNEED);
+		madvise((uint8_t *)buf + sb->directory_start, sb->directory_end - sb->directory_start, MADV_WILLNEED);
+	}
 }
 
 export void hardhat_close(void *buf) {

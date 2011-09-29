@@ -21,6 +21,7 @@ int main(int argc, char **argv) {
 		perror(argv[1]);
 		exit(2);
 	}
+	hardhat_precache(buf, true);
 
 	for(i = 2; i < argc; i++) {
 		c = hardhat_cursor(buf, argv[i], (uint16_t)strlen(argv[i]));
