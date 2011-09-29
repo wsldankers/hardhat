@@ -10,7 +10,7 @@ AC_CONFIG_FILES([Makefile])
 
 AC_DEFINE([_GNU_SOURCE],1,[needed for some calls])
 AC_DEFINE([_XOPEN_SOURCE],500,[needed for some calls])
-AC_DEFINE([_FILE_OFFSET_BITS],64,[because gnu libc is retarded])
+AC_DEFINE([_FILE_OFFSET_BITS],64,[to have proper large file support])
 
 AC_PROG_CC
 AC_PROG_INSTALL

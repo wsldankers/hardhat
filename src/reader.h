@@ -16,10 +16,11 @@ typedef struct hardhat_cursor {
 	uint8_t prefix[1];
 } hardhat_cursor_t;
 
-void *hardhat_open(const char *filename);
-void hardhat_close(void *hardhat);
-hardhat_cursor_t *hardhat_cursor(const void *hardhat, const void *prefix, uint16_t prefixlen);
-bool hardhat_fetch(hardhat_cursor_t *c, bool recursive);
-void hardhat_cursor_free(hardhat_cursor_t *c);
+extern void *hardhat_open(const char *filename);
+extern void hardhat_precache(void *buf, bool data);
+extern void hardhat_close(void *hardhat);
+extern hardhat_cursor_t *hardhat_cursor(const void *hardhat, const void *prefix, uint16_t prefixlen);
+extern bool hardhat_fetch(hardhat_cursor_t *c, bool recursive);
+extern void hardhat_cursor_free(hardhat_cursor_t *c);
 
 #endif
