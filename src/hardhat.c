@@ -24,7 +24,7 @@ int main(int argc, char **argv) {
 
 	for(i = 2; i < argc; i++) {
 		c = hardhat_cursor(buf, argv[i], (uint16_t)strlen(argv[i]));
-		if(c && c->data) {
+		if(c) {
 			while(hardhat_fetch(c, true)) {
 				cc = hardhat_cursor(buf, c->key, c->keylen);
 				if(!cc || !cc->key) {

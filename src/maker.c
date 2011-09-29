@@ -163,17 +163,9 @@ static size_t pad4k(size_t x) {
 	return x;
 }
 
-static uint16_t u16read(const void *buf) {
-	return *(uint16_t *)buf;
-}
-
-static uint32_t u32read(const void *buf) {
-	return *(uint32_t *)buf;
-}
-
-static uint64_t u64read(const void *buf) {
-	return *(uint64_t *)buf;
-}
+#define u16read(buf) (*(uint16_t *)(buf))
+#define u32read(buf) (*(uint32_t *)(buf))
+#define u64read(buf) (*(uint64_t *)(buf))
 
 static void hhm_set_error(hardhat_maker_t *hhm, const char *fmt, ...) {
 	int r;
@@ -307,7 +299,8 @@ static const uint8_t *hhm_getrec(hardhat_maker_t *hhm, uint64_t off) {
 export bool hardhat_maker_add(hardhat_maker_t *hhm, const void *key, uint16_t keylen, const void *data, uint32_t datalen) {
 	size_t recsize, padsize;
 	static const char padding[4] = {0};
-	uint32_t cur, hash, hp, value;
+	uint32_t hash, hp, value;
+	uint64_t off;
 	struct hashtable *ht;
 	const uint8_t *old;
 	void *buf;
@@ -360,7 +353,7 @@ export bool hardhat_maker_add(hardhat_maker_t *hhm, const void *key, uint16_t ke
 	recsize = (size_t)6 + (size_t)keylen + (size_t)datalen;
 	padsize = pad4(recsize);
 
-	cur = hhm->off;
+	off = hhm->off;
 
 	if(!hhm_db_append(hhm, &datalen, sizeof datalen))
 		return false;
@@ -387,14 +380,14 @@ export bool hardhat_maker_add(hardhat_maker_t *hhm, const void *key, uint16_t ke
 		}
 		hhm->recbuf = buf;
 	}
-	hhm->recbuf[hhm->recnum++] = cur;
+	hhm->recbuf[hhm->recnum++] = off;
 
 	return true;
 }
 
 export bool hardhat_maker_parents(hardhat_maker_t *hhm, const void *data, uint32_t datalen) {
 	struct hashtable *ht;
-	uint32_t cur, hp, hash, value;
+	uint32_t i;
 	const uint8_t *rec, *slash, *key;
 	uint16_t keylen;
 
@@ -404,8 +397,8 @@ export bool hardhat_maker_parents(hardhat_maker_t *hhm, const void *data, uint32
 	}
 
 	ht = hhm->hashtable;
-	for(cur = 0; cur < hhm->recnum; cur++) {
-		rec = hhm_getrec(hhm, hhm->recbuf[cur]);
+	for(i = 0; i < hhm->recnum; i++) {
+		rec = hhm_getrec(hhm, hhm->recbuf[i]);
 		if(!rec)
 			return false;
 		key = rec + 6;
@@ -424,35 +417,43 @@ static hardhat_maker_t *qsort_data;
 
 static int qsort_directory_cmp(const void *a, const void *b) {
 	const uint8_t *ar, *br;
+	uint32_t ad, bd;
+	const uint64_t *recs;
+
 	if(!qsort_data)
 		return 0;
-	ar = hhm_getrec(qsort_data, u64read(a));
+
+	ad = ((const struct hashentry *)a)->data;
+	bd = ((const struct hashentry *)b)->data;
+
+	if(ad == UINT32_MAX)
+		return bd == UINT32_MAX ? 0 : 1;
+	else if(bd == UINT32_MAX)
+		return -1;
+
+	recs = qsort_data->recbuf;
+
+	ar = hhm_getrec(qsort_data, recs[ad]);
 	if(!ar) {
 		qsort_data = NULL;
 		return 0;
 	}
-	br = hhm_getrec(qsort_data, u64read(b));
+
+	br = hhm_getrec(qsort_data, recs[bd]);
 	if(!br) {
 		qsort_data = NULL;
 		return 0;
 	}
+
 	return hardhat_cmp(ar + 6, u16read(ar + 4), br + 6, u16read(br + 4));
 }
 
 static int qsort_hash_cmp(const void *a, const void *b) {
-	const struct hashentry *ar, *br;
 	uint32_t am, bm;
 
-	ar = a;
-	br = b;
+	am = ((const struct hashentry *)a)->hash;
+	bm = ((const struct hashentry *)b)->hash;
 
-	if(ar->data == UINT32_MAX)
-		return br->data == UINT32_MAX ? 0 : 1;
-	else if(br->data == UINT32_MAX)
-		return -1;
-
-	am = ar->hash;
-	bm = br->hash;
 	return am < bm ? -1 : am > bm ? 1 : 0;
 }
 
@@ -480,22 +481,30 @@ export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 		return false;
 	}
 
-	hhm->superblock.hash_start = hhm->off;
-
 	ht = hhm->hashtable;
 	qsort_data = hhm;
-	qsort(ht->buf, ht->size, sizeof *ht->buf, qsort_hash_cmp);
+	qsort(ht->buf, ht->size, sizeof *ht->buf, qsort_directory_cmp);
+
+	hhm->superblock.directory_start = hhm->off;
 
 	dir = hhm->recbuf;
 	for(i = 0; i < num; i++) {
 		he = ht->buf + i;
-		he->data = dir[he->data];
+
+		if(!hhm_db_append(hhm, dir + he->data, sizeof *dir))
+			return false;
+
+		he->data = i;
 	}
 
-	if(!hhm_db_append(hhm, ht->buf, num * sizeof *ht->buf))
-		return false;
+	hhm->superblock.directory_end = hhm->off;
 
-	hhm->superblock.hash_end = hhm->off;
+	qsort_data = hhm;
+	qsort(ht->buf, num, sizeof *ht->buf, qsort_hash_cmp);
+	if(!qsort_data) {
+		hhm->failed = true;
+		return false;
+	}
 
 	hhm->off = pad4k(hhm->off);
 	if(fseek(db, hhm->off, SEEK_SET) == -1) {
@@ -504,23 +513,19 @@ export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 		return false;
 	}
 
-	hhm->superblock.directory_start = hhm->off;
+	hhm->superblock.hash_start = hhm->off;
 
-	qsort_data = hhm;
-	qsort(hhm->recbuf, num, sizeof *hhm->recbuf, qsort_directory_cmp);
-	if(!qsort_data) {
-		hhm->failed = true;
-		return false;
-	}
-
-	if(!hhm_db_append(hhm, hhm->recbuf, num * sizeof *hhm->recbuf))
+	if(!hhm_db_append(hhm, ht->buf, num * sizeof *ht->buf))
 		return false;
 
-	hhm->superblock.directory_end = hhm->off;
+	hhm->superblock.hash_end = hhm->off;
+
+	hhm->off = pad4k(hhm->off);
+
 	memcpy(hhm->superblock.magic, HARDHAT_MAGIC, sizeof hhm->superblock.magic);
 	hhm->superblock.byteorder = UINT64_C(0x0123456789ABCDEF);
+	hhm->superblock.version = UINT32_C(1);
 	hhm->superblock.entries = num;
-	hhm->off = pad4k(hhm->off);
 	hhm->superblock.filesize = hhm->off;
 	hhm->superblock.checksum = calchash((const void *)&hhm->superblock, sizeof hhm->superblock - 4);
 

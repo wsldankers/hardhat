@@ -12,25 +12,6 @@
 #include "layout.h"
 #include "maker.h"
 
-/*
-	lees alle data in, en schrijf naar file:
-	<u32 datalen><u16 keylen><key><data>
-	met 4-byte alignment
-	beginnen met schrijven op offset 4k
-
-	tijdens inlezen:
-		(temp) lijst aanmaken van <u32 offsets><u32 hash>
-		(temp) hashtable bijhouden die wijst naar ingangen in die lijst
-		bij duplicates, ingang in lijst vervangen
-
-	hashtable wegbokken
-
-	lijst sorteren
-	lijst wegschrijven naar file (offsets)
-	lijst wegschrijven naar file (offsets in de lijst als hashtable)
-	lijst wegbokken
-*/
-
 static bool errors = false;
 
 static int readchar(FILE *fh, const char *name) {
