@@ -57,21 +57,15 @@ export bool hardhat_maker_fatal(hardhat_maker_t *hhm) {
 	- remove occurrences of .
 	- resolve occurrences of ..
 */
+__attribute__((optimize(99)))
 export size_t hardhat_normalize(uint8_t *dst, const uint8_t *src, size_t size) {
 	uint8_t *cur, *end;
 	const uint8_t *sep, *nul;
 	size_t len;
 
-#if 0
-	/* enable this to preserve absolute paths */
-	if(*src == '/')
-		*dst++ = *src++;
-#endif
-
 	nul = src + size;
 	cur = dst;
 	do {
-		/* strchrnul() */
 		sep = memchr(src, '/', (size_t)(nul - src));
 		if(!sep)
 			sep = nul;
@@ -98,53 +92,61 @@ export size_t hardhat_normalize(uint8_t *dst, const uint8_t *src, size_t size) {
 
 /* compare two paths:
 
-	- paths are sorted by the number of slashes
-	- if that number is equal, do a standard string comparison
+	- equal path components are skipped
+	- if only one of the paths has no more slashes left, that path "wins"
+	- otherwise the first of the remaining components of each path is
+	  compared in lexicographic order
 */
+__attribute__((optimize(99)))
 export int hardhat_cmp(const void *a, size_t al, const void *b, size_t bl) {
-	const char *as, *bs, *ap, *bp, *ae, *be;
-	size_t ac, bc;
-	int c;
+	const uint8_t *as, *bs, *ap, *bp;
+	uint8_t ac = 0, bc = 0;
+	size_t l;
+
+	as = a;
+	bs = b;
+
+	l = al < bl ? al : bl;
+
+	while(l) {
+		ac = *as;
+		bc = *bs;
+		if(ac != bc)
+			break;
+		as++;
+		bs++;
+		l--;
+	}
+
+	if(al < bl) {
+		bl -= al - l;
+		al = l;
+	} else {
+		al -= bl - l;
+		bl = l;
+	}
 
 	if(!al)
 		return bl ? -1 : 0;
 	if(!bl)
 		return 1;
 
-	as = a;
-	bs = b;
-	ae = as + al;
-	be = bs + bl;
+	if(ac == '/')
+		return 1;
+	else if(bc == '/')
+		return -1;
 
-	for(;;) {
-		ap = memchr(as, '/', (size_t)(ae - as));
-		bp = memchr(bs, '/', (size_t)(be - bs));
-		if(ap) {
-			if(!bp)
-				return 1;
-			ac = (size_t)(ap - as);
-			bc = (size_t)(bp - bs);
-		} else {
-			if(bp)
-				return -1;
-			ac = (size_t)(ae - as);
-			bc = (size_t)(be - bs);
-		}
-
-		c = memcmp(as, bs, ac < bc ? ac : bc);
-		if(c)
-			return c;
-
-		if(ac < bc)
-			return -1;
-		else if(ac > bc)
+	ap = memchr(as, '/', al);
+	bp = memchr(bs, '/', bl);
+	if(ap) {
+		if(!bp)
 			return 1;
-		else if(!ap)
-			return 0;
-
-		as = ap + 1;
-		bs = bp + 1;
+	} else {
+		if(bp)
+			return -1;
 	}
+
+	return ac < bc ? -1 : 1;
 }
 
 static size_t pad4(size_t x) {
