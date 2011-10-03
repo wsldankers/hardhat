@@ -93,17 +93,6 @@ export void hardhat_close(void *buf) {
 #define u32read(buf) (*(uint32_t *)(buf))
 #define u64read(buf) (*(uint64_t *)(buf))
 
-static int hhr_cmp(const void *a, size_t al, const void *b, size_t bl) {
-	size_t l;
-	int d;
-
-	l = al < bl ? al : bl;
-	d = memcmp(a, b, l);
-	if(d)
-		return d;
-	return al < bl ? -1 : al > bl ? 1 : 0;
-}
-
 #define CURSOR_NONE (UINT32_MAX)
 
 static const hardhat_cursor_t hardhat_cursor_0 = {
@@ -130,7 +119,7 @@ static uint32_t hhc_find(hardhat_cursor_t *c, bool recursive) {
 	for(;;) {
 		cur = (uint32_t)(((uint64_t)lower + (uint64_t)upper) / UINT64_C(2));
 		rec = buf + directory[cur];
-		d = hhr_cmp(rec + 6, u16read(rec + 4), c->prefix, c->prefixlen);
+		d = hardhat_cmp(rec + 6, u16read(rec + 4), c->prefix, c->prefixlen);
 		if(d < 0)
 			lower = cur + 1;
 		else if(d > 0)
