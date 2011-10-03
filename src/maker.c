@@ -276,7 +276,7 @@ static bool hhm_db_append(hardhat_maker_t *hhm, const void *buf, size_t len) {
 }
 
 static const uint8_t *hhm_getrec(hardhat_maker_t *hhm, uint64_t off) {
-	if(hhm->windowsize < off) {
+	if(hhm->windowsize <= off) {
 		if(hhm->window != MAP_FAILED)
 			munmap(hhm->window, hhm->windowsize);
 		if(fflush(hhm->db) == EOF) {
