@@ -99,6 +99,7 @@ static const hardhat_cursor_t hardhat_cursor_0 = {
 	.cur = CURSOR_NONE
 };
 
+__attribute__((unused))
 static uint32_t hhc_find(hardhat_cursor_t *c, bool recursive) {
 	const struct hardhat_superblock *sb;
 	uint32_t lower, upper, cur;
@@ -141,26 +142,23 @@ static uint32_t hhc_find(hardhat_cursor_t *c, bool recursive) {
 	}
 }
 
-static void hhm_hash_find(hardhat_cursor_t *c) {
+static void hhm_hash_find(hardhat_cursor_t *c, const void *str, uint16_t len) {
 	const struct hashentry *he, *ht;
 	const struct hardhat_superblock *sb;
 	uint32_t i, hp, hash, recnum, upper, lower, upper_hash, lower_hash;
-	uint16_t prefixlen, keylen;
+	uint16_t keylen;
 	const uint64_t *directory;
 	const uint8_t *rec, *buf;
 
 	sb = c->hardhat;
 	recnum = sb->entries;
-
 	if(!recnum)
 		return;
 
-	prefixlen = c->prefixlen;
-	hash = calchash(c->prefix, (size_t)prefixlen);
+	hash = calchash(str, len);
 	buf = c->hardhat;
 
 	ht = (const struct hashentry *)(buf + sb->hash_start);
-	hp = (uint32_t)((uint64_t)hash * (uint64_t)recnum / (uint64_t)UINT32_MAX);
 	directory = (const uint64_t *)(buf + sb->directory_start);
 
 	lower = 0;
@@ -190,12 +188,11 @@ static void hhm_hash_find(hardhat_cursor_t *c) {
 			break;
 		rec = buf + directory[he->data];
 		keylen = u16read(rec + 4);
-		if(keylen == prefixlen && !memcmp(rec + 6, c->prefix, prefixlen)) {
+		if(keylen == len && !memcmp(rec + 6, str, len)) {
 			c->key = rec + 6;
 			c->keylen = keylen;
 			c->data = rec + 6 + keylen;
 			c->datalen = u32read(rec);
-			return;
 		}
 	}
 
@@ -205,14 +202,83 @@ static void hhm_hash_find(hardhat_cursor_t *c) {
 			break;
 		rec = buf + directory[he->data];
 		keylen = u16read(rec + 4);
-		if(keylen == prefixlen && !memcmp(rec + 6, c->prefix, prefixlen)) {
+		if(keylen == len && !memcmp(rec + 6, str, len)) {
 			c->key = rec + 6;
 			c->keylen = keylen;
 			c->data = rec + 6 + keylen;
 			c->datalen = u32read(rec);
-			return;
 		}
 	}
+}
+
+static uint32_t hhm_prefix_find(const void *hardhat, const void *str, uint16_t len) {
+	const struct hashentry *he, *ht;
+	const struct hardhat_superblock *sb;
+	uint32_t i, hp, hash, hashnum, recnum, upper, lower, upper_hash, lower_hash;
+	uint16_t keylen;
+	const uint64_t *directory;
+	const uint8_t *rec, *buf;
+
+	sb = hardhat;
+	recnum = sb->entries;
+	hashnum = sb->prefixes;
+
+	if(!recnum)
+		return CURSOR_NONE;
+	if(!len)
+		return 0;
+	if(!hashnum)
+		return CURSOR_NONE;
+
+	hash = calchash(str, len);
+	buf = hardhat;
+
+	ht = (const struct hashentry *)(buf + sb->prefix_start);
+	directory = (const uint64_t *)(buf + sb->directory_start);
+
+	lower = 0;
+	upper = hashnum;
+	lower_hash = 0;
+	upper_hash = UINT32_MAX;
+
+	for(;;) {
+		hp = lower + (uint32_t)((uint64_t)(hash - lower_hash) * (uint64_t)(upper - lower) / (uint64_t)(upper_hash - lower_hash));
+		he = ht + hp;
+
+		if(he->hash < hash) {
+			lower = hp + 1;
+			lower_hash = he->hash;
+		} else if(he->hash > hash) {
+			upper = hp;
+			upper_hash = he->hash;
+		} else {
+			break;
+		}
+		if(lower == upper)
+			return CURSOR_NONE;
+	}
+
+	for(i = hp + 1; i < hashnum; i++) {
+		he = ht + i;
+		if(he->hash > hash)
+			break;
+		rec = buf + directory[he->data];
+		keylen = u16read(rec + 4);
+		if(keylen >= len && !memcmp(rec + 6, str, len))
+			return he->data;
+	}
+
+	for(i = hp; i < hashnum; i--) {
+		he = ht + i;
+		if(he->hash < hash)
+			break;
+		rec = buf + directory[he->data];
+		keylen = u16read(rec + 4);
+		if(keylen >= len && !memcmp(rec + 6, str, len))
+			return he->data;
+	}
+
+	return CURSOR_NONE;
 }
 
 export hardhat_cursor_t *hardhat_cursor(const void *hardhat, const void *prefix, uint16_t prefixlen) {
@@ -230,7 +296,7 @@ export hardhat_cursor_t *hardhat_cursor(const void *hardhat, const void *prefix,
 	c->prefixlen = prefixlen = (uint16_t)hardhat_normalize(c->prefix, prefix, prefixlen);
 	c->hardhat = hardhat;
 
-	hhm_hash_find(c);
+	hhm_hash_find(c, c->prefix, prefixlen);
 
 	if(prefixlen)
 		c->prefix[prefixlen++] = '/';
@@ -251,24 +317,24 @@ export bool hardhat_fetch(hardhat_cursor_t *c, bool recursive) {
 	buf = c->hardhat;
 	directory = (const uint64_t *)(buf + sb->directory_start);
 
-	if(cur == CURSOR_NONE) {
-		cur = hhc_find(c, recursive);
-	} else {
+	if(cur == CURSOR_NONE)
+		cur = hhm_prefix_find(buf, c->prefix, c->prefixlen);
+	else
 		cur++;
-		if(cur < sb->entries) {
-			rec = buf + directory[cur];
-			keylen = u16read(rec + 4);
-			if(keylen < c->prefixlen
-			|| memcmp(rec + 6, c->prefix, c->prefixlen)
-			|| (!recursive && memchr(rec + 6 + c->prefixlen, '/', (size_t)(keylen - c->prefixlen))))
-				cur = CURSOR_NONE;
-		} else {
+
+	if(cur < sb->entries) {
+		rec = buf + directory[cur];
+		keylen = u16read(rec + 4);
+		if(keylen < c->prefixlen
+		|| memcmp(rec + 6, c->prefix, c->prefixlen)
+		|| (!recursive && memchr(rec + 6 + c->prefixlen, '/', (size_t)(keylen - c->prefixlen))))
 			cur = CURSOR_NONE;
-		}
+	} else {
+		cur = CURSOR_NONE;
 	}
 
+	c->cur = cur;
 	if(cur == CURSOR_NONE) {
-		c->cur = cur;
 		c->key = NULL;
 		c->data = NULL;
 		c->keylen = 0;
@@ -277,7 +343,6 @@ export bool hardhat_fetch(hardhat_cursor_t *c, bool recursive) {
 	}
 
 	rec = buf + directory[cur];
-	c->cur = cur;
 	c->key = rec + 6;
 	c->keylen = u16read(rec + 4);
 	c->data = rec + 6 + c->keylen;

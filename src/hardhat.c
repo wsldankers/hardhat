@@ -35,6 +35,8 @@ int main(int argc, char **argv) {
 					fwrite(c->data, 1, c->datalen, stdout);
 					printf("]\n");
 				}
+				if(cc)
+					hardhat_fetch(cc, true);
 				hardhat_cursor_free(cc);
 			}
 		}

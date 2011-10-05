@@ -459,12 +459,33 @@ static int qsort_hash_cmp(const void *a, const void *b) {
 	return am < bm ? -1 : am > bm ? 1 : 0;
 }
 
+__attribute__((optimize(99)))
+static size_t common_parents(const uint8_t *a, size_t al, const uint8_t *b, size_t bl) {
+	size_t cl = 0, l, i;
+	uint8_t ac, bc;
+
+	l = al < bl ? al : bl;
+
+	for(i = 0; i < l; i++) {
+		ac = a[i];
+		bc = b[i];
+		if(ac != bc)
+			break;
+		if(ac == '/')
+			cl = i + 1;
+	}
+
+	return cl;
+}
+
 export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 	FILE *db;
 	struct hashtable *ht;
 	struct hashentry *he;
-	uint32_t i, num;
+	uint32_t i, num, pfxnum;
 	uint64_t *dir;
+	const uint8_t *cur, *prev, *end;
+	uint16_t curlen, prevlen, endlen;
 
 	if(!hhm || hhm->failed || hhm->finished) {
 		errno = EINVAL;
@@ -486,6 +507,10 @@ export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 	ht = hhm->hashtable;
 	qsort_data = hhm;
 	qsort(ht->buf, ht->size, sizeof *ht->buf, qsort_directory_cmp);
+	if(!qsort_data) {
+		hhm->failed = true;
+		return false;
+	}
 
 	hhm->superblock.directory_start = hhm->off;
 
@@ -502,10 +527,6 @@ export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 	hhm->superblock.directory_end = hhm->off;
 
 	qsort(ht->buf, num, sizeof *ht->buf, qsort_hash_cmp);
-	if(!qsort_data) {
-		hhm->failed = true;
-		return false;
-	}
 
 	hhm->off = pad4k(hhm->off);
 	if(fseek(db, hhm->off, SEEK_SET) == -1) {
@@ -522,11 +543,74 @@ export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 	hhm->superblock.hash_end = hhm->off;
 
 	hhm->off = pad4k(hhm->off);
+	if(fseek(db, hhm->off, SEEK_SET) == -1) {
+		hhm_set_error(hhm, "seeking in %s failed: %m", hhm->filename);
+		hhm->failed = true;
+		return false;
+	}
+
+	if(!hhm_getrec(hhm, hhm->superblock.directory_end))
+		return false;
+
+	memcpy(dir, hhm->window + hhm->superblock.directory_start, sizeof *dir * num);
+
+	prev = NULL;
+	prevlen = 0;
+	pfxnum = 0;
+	for(i = 0; i < num; i++) {
+		cur = hhm->window + dir[i];
+		curlen = u16read(cur + 4);
+		cur += 6;
+
+		endlen = common_parents(prev, prevlen, cur, curlen);
+		end = cur + endlen;
+		for(;;) {
+			end = memchr(end, '/', curlen - endlen);
+			if(!end)
+				break;
+			end++;
+		
+			endlen = (uint16_t)(end - cur);
+			if(ht->size == pfxnum) {
+				ht->size *= 2;
+				he = realloc(ht->buf, ht->size * sizeof *ht->buf);
+				if(!he) {
+					hhm->failed = true;
+					free(hhm->error);
+					hhm->error = enomem;
+					return false;
+				}
+				ht->buf = he;
+			}
+			he = ht->buf + pfxnum++;
+			he->hash = calchash(cur, endlen);
+			he->data = i;
+		}
+		prev = cur;
+		prevlen = curlen;
+	}
+
+	qsort(ht->buf, pfxnum, sizeof *ht->buf, qsort_hash_cmp);
+
+	hhm->superblock.prefix_start = hhm->off;
+
+	if(!hhm_db_append(hhm, ht->buf, pfxnum * sizeof *ht->buf))
+		return false;
+
+	hhm->superblock.prefix_end = hhm->off;
+
+	hhm->off = pad4k(hhm->off);
+	if(fseek(db, hhm->off, SEEK_SET) == -1) {
+		hhm_set_error(hhm, "seeking in %s failed: %m", hhm->filename);
+		hhm->failed = true;
+		return false;
+	}
 
 	memcpy(hhm->superblock.magic, HARDHAT_MAGIC, sizeof hhm->superblock.magic);
 	hhm->superblock.byteorder = UINT64_C(0x0123456789ABCDEF);
 	hhm->superblock.version = UINT32_C(1);
 	hhm->superblock.entries = num;
+	hhm->superblock.prefixes = pfxnum;
 	hhm->superblock.filesize = hhm->off;
 	hhm->superblock.checksum = calchash((const void *)&hhm->superblock, sizeof hhm->superblock - 4);
 
