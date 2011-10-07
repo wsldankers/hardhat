@@ -262,20 +262,40 @@ static uint32_t hhm_prefix_find(const void *hardhat, const void *str, uint16_t l
 		he = ht + i;
 		if(he->hash > hash)
 			break;
+
 		rec = buf + directory[he->data];
 		keylen = u16read(rec + 4);
-		if(keylen >= len && !memcmp(rec + 6, str, len))
-			return he->data;
+		if(keylen < len || memcmp(rec + 6, str, len))
+			continue;
+
+		if(he->data) {
+			rec = buf + directory[he->data - 1];
+			keylen = u16read(rec + 4);
+			if(keylen >= len && !memcmp(rec + 6, str, len))
+				continue;
+		}
+
+		return he->data;
 	}
 
 	for(i = hp; i < hashnum; i--) {
 		he = ht + i;
 		if(he->hash < hash)
 			break;
+
 		rec = buf + directory[he->data];
 		keylen = u16read(rec + 4);
-		if(keylen >= len && !memcmp(rec + 6, str, len))
-			return he->data;
+		if(keylen < len || memcmp(rec + 6, str, len))
+			continue;
+
+		if(he->data) {
+			rec = buf + directory[he->data - 1];
+			keylen = u16read(rec + 4);
+			if(keylen >= len && !memcmp(rec + 6, str, len))
+				continue;
+		}
+
+		return he->data;
 	}
 
 	return CURSOR_NONE;
