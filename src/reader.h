@@ -13,6 +13,7 @@ typedef struct hardhat_cursor {
 	uint32_t datalen;
 	uint16_t keylen;
 	uint16_t prefixlen;
+	bool started;
 	uint8_t prefix[1];
 } hardhat_cursor_t;
 

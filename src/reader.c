@@ -95,9 +95,7 @@ export void hardhat_close(void *buf) {
 
 #define CURSOR_NONE (UINT32_MAX)
 
-static const hardhat_cursor_t hardhat_cursor_0 = {
-	.cur = CURSOR_NONE
-};
+static const hardhat_cursor_t hardhat_cursor_0 = {.cur = CURSOR_NONE};
 
 __attribute__((unused))
 static uint32_t hhc_find(hardhat_cursor_t *c, bool recursive) {
@@ -142,19 +140,22 @@ static uint32_t hhc_find(hardhat_cursor_t *c, bool recursive) {
 	}
 }
 
-static void hhm_hash_find(hardhat_cursor_t *c, const void *str, uint16_t len) {
+static void hhm_hash_find(hardhat_cursor_t *c) {
 	const struct hashentry *he, *ht;
 	const struct hardhat_superblock *sb;
 	uint32_t i, hp, hash, recnum, upper, lower, upper_hash, lower_hash;
-	uint16_t keylen;
+	uint16_t len, keylen;
 	const uint64_t *directory;
 	const uint8_t *rec, *buf;
+	const void *str;
 
 	sb = c->hardhat;
 	recnum = sb->entries;
 	if(!recnum)
 		return;
 
+	str = c->prefix;
+	len = c->prefixlen;
 	hash = calchash(str, len);
 	buf = c->hardhat;
 
@@ -189,6 +190,7 @@ static void hhm_hash_find(hardhat_cursor_t *c, const void *str, uint16_t len) {
 		rec = buf + directory[he->data];
 		keylen = u16read(rec + 4);
 		if(keylen == len && !memcmp(rec + 6, str, len)) {
+			c->cur = he->data;
 			c->key = rec + 6;
 			c->keylen = keylen;
 			c->data = rec + 6 + keylen;
@@ -203,6 +205,7 @@ static void hhm_hash_find(hardhat_cursor_t *c, const void *str, uint16_t len) {
 		rec = buf + directory[he->data];
 		keylen = u16read(rec + 4);
 		if(keylen == len && !memcmp(rec + 6, str, len)) {
+			c->cur = he->data;
 			c->key = rec + 6;
 			c->keylen = keylen;
 			c->data = rec + 6 + keylen;
@@ -316,7 +319,7 @@ export hardhat_cursor_t *hardhat_cursor(const void *hardhat, const void *prefix,
 	c->prefixlen = prefixlen = (uint16_t)hardhat_normalize(c->prefix, prefix, prefixlen);
 	c->hardhat = hardhat;
 
-	hhm_hash_find(c, c->prefix, prefixlen);
+	hhm_hash_find(c);
 
 	if(prefixlen)
 		c->prefix[prefixlen++] = '/';
@@ -337,10 +340,10 @@ export bool hardhat_fetch(hardhat_cursor_t *c, bool recursive) {
 	buf = c->hardhat;
 	directory = (const uint64_t *)(buf + sb->directory_start);
 
-	if(cur == CURSOR_NONE)
-		cur = hhm_prefix_find(buf, c->prefix, c->prefixlen);
-	else
+	if(c->started)
 		cur++;
+	else
+		cur = hhm_prefix_find(buf, c->prefix, c->prefixlen);
 
 	if(cur < sb->entries) {
 		rec = buf + directory[cur];
@@ -359,7 +362,7 @@ export bool hardhat_fetch(hardhat_cursor_t *c, bool recursive) {
 		c->data = NULL;
 		c->keylen = 0;
 		c->datalen = 0;
-		return false;
+		return c->started = false;
 	}
 
 	rec = buf + directory[cur];
@@ -367,7 +370,7 @@ export bool hardhat_fetch(hardhat_cursor_t *c, bool recursive) {
 	c->keylen = u16read(rec + 4);
 	c->data = rec + 6 + c->keylen;
 	c->datalen = u32read(rec);
-	return true;
+	return c->started = true;
 }
 
 export void hardhat_cursor_free(hardhat_cursor_t *c) {
