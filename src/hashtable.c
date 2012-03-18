@@ -90,14 +90,14 @@ static uint32_t nextorderprime(int order) {
 	return u;
 }
 
-/* hashing function (Fowler-Noll-Vo 1, using the same constant as bdb) */
+/* hashing function (Fowler-Noll-Vo 1a, using the same constant as bdb) */
 uint32_t calchash(const uint8_t *key, size_t len) {
 	const uint8_t *e;
 	uint32_t h;
 
 	e = key + len;
 	for(h = 0; key < e; key++)
-		h = (h * UINT32_C(16777619)) ^ *key;
+		h = (h ^ *key) * UINT32_C(16777619);
 
 	return h;
 }
