@@ -6,6 +6,8 @@
 
 #include "reader.h"
 
+/* test program to exercise a hardhat database */
+
 int main(int argc, char **argv) {
 	void *buf;
 	hardhat_cursor_t *c, *cc;
@@ -26,6 +28,8 @@ int main(int argc, char **argv) {
 	for(i = 2; i < argc; i++) {
 		c = hardhat_cursor(buf, argv[i], (uint16_t)strlen(argv[i]));
 		if(c) {
+			/* loop over all entries and print the ones that cannot
+			** be found by hash lookup (should be zero) */
 			while(hardhat_fetch(c, true)) {
 				cc = hardhat_cursor(buf, c->key, c->keylen);
 				if(!cc || !cc->key) {

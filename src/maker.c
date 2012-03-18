@@ -16,28 +16,58 @@
 #include "hashtable.h"
 #include "layout.h"
 
+/******************************************************************************
+
+	Module to create a hardhat table. Uses an unholy combination of
+	buffered I/O and low-level mmap() to get the job done. Caveat developer.
+
+******************************************************************************/
+
 #define export __attribute__((visibility("default")))
 
 struct hardhat_maker {
+	/* Output file handle */
 	FILE *db;
+	/* Database file name */
 	char *filename;
-	uint8_t *keybuf, *window;
-	size_t recsize, padsize, windowsize, recbufsize;
-	uint64_t off, *recbuf;
+	/* Buffer used to manipulate key values (normalization, etc) */
+	uint8_t *keybuf;
+	/* Window into the already written data, used to detect duplicates */
+	uint8_t *window;
+	/* Size of window */
+	size_t windowsize;
+	/* Size of container for added records */
+	size_t recbufsize;
+	/* Offset of first unused space in output file */
+	uint64_t off;
+	/* Offset of added records */
+	uint64_t *recbuf;
+	/* Number of added records */
 	uint32_t recnum;
+	/* Hashtable of added records, used to detect duplicates */
 	struct hashtable *hashtable;
-	bool failed, finished;
+	/* If this boolean is set, database creation has failed and
+		cannot be restarted or continued. */
+	bool failed;
+	/* Database is completed and cannot be modified anymore */
+	bool finished;
+	/* Indicates what went wrong in case of failure */
 	char *error;
+	/* The superblock, as it will be created at the end */
 	struct hardhat_superblock superblock;
 };
 
+/* The only case in which it is impossible to allocate the
+	error dynamically */
 static char enomem[] = "Out of memory";
 
+/* struct defaults */
 static const hardhat_maker_t hardhat_maker_0 = {
 	.recbufsize = 65536,
 	.window = MAP_FAILED
 };
 
+/* Return the error (if any) or an empty string (but never NULL) */
 export const char *hardhat_maker_error(hardhat_maker_t *hhm) {
 	return hhm
 		? hhm->error
@@ -46,6 +76,8 @@ export const char *hardhat_maker_error(hardhat_maker_t *hhm) {
 		: strerror(errno);
 }
 
+/* Returns true if this database failed in a way that can't be
+	recovered from */
 export bool hardhat_maker_fatal(hardhat_maker_t *hhm) {
 	return hhm ? hhm->failed : true;
 }
@@ -94,8 +126,17 @@ export size_t hardhat_normalize(uint8_t *dst, const uint8_t *src, size_t size) {
 
 	- equal path components are skipped
 	- if only one of the paths has no more slashes left, that path "wins"
-	- otherwise the first of the remaining components of each path is
-	  compared in lexicographic order
+	- otherwise the remaining components of each path are compared in
+	  lexicographic order
+
+	Example sorting:
+
+	x
+	x/a
+	x/b
+	x/a/1
+	x/a/2
+	x/b/1
 */
 __attribute__((optimize(99)))
 export int hardhat_cmp(const void *a, size_t al, const void *b, size_t bl) {
@@ -149,6 +190,7 @@ export int hardhat_cmp(const void *a, size_t al, const void *b, size_t bl) {
 	return ac < bc ? -1 : 1;
 }
 
+/* Calculate padding for 4-byte alignment */
 static size_t pad4(size_t x) {
 	size_t p;
 	p = x & 3;
@@ -157,6 +199,7 @@ static size_t pad4(size_t x) {
 	return x;
 }
 
+/* Calculate padding for 4096-byte alignment */
 static size_t pad4k(size_t x) {
 	size_t p;
 	p = x & 4095;
@@ -165,10 +208,12 @@ static size_t pad4k(size_t x) {
 	return x;
 }
 
+/* Convenience macros to fetch aligned n-bit values */
 #define u16read(buf) (*(uint16_t *)(buf))
 #define u32read(buf) (*(uint32_t *)(buf))
 #define u64read(buf) (*(uint64_t *)(buf))
 
+/* Allocate and set an error message, using printf semantics */
 static void hhm_set_error(hardhat_maker_t *hhm, const char *fmt, ...) {
 	int r;
 	va_list ap;
@@ -190,6 +235,8 @@ static void hhm_set_error(hardhat_maker_t *hhm, const char *fmt, ...) {
 	}
 }
 
+/* Allocate and initialize a hardhat_maker_t structure.
+	Returns NULL on failure, with errno set to the problem. */
 export hardhat_maker_t *hardhat_maker_new(const char *filename) {
 	hardhat_maker_t *hhm;
 	int err;
@@ -257,6 +304,7 @@ export hardhat_maker_t *hardhat_maker_new(const char *filename) {
 	return hhm;
 }
 
+/* Write bytes to the database and handle any errors */
 static bool hhm_db_write(hardhat_maker_t *hhm, const void *buf, size_t len) {
 	if(!len)
 		return true;
@@ -270,6 +318,7 @@ static bool hhm_db_write(hardhat_maker_t *hhm, const void *buf, size_t len) {
 	return true;
 }
 
+/* Append bytes to the database and update off */
 static bool hhm_db_append(hardhat_maker_t *hhm, const void *buf, size_t len) {
 	if(!hhm_db_write(hhm, buf, len))
 		return false;
@@ -277,6 +326,8 @@ static bool hhm_db_append(hardhat_maker_t *hhm, const void *buf, size_t len) {
 	return true;
 }
 
+/* Fetch already written bytes from the database by maintaining a mmap()ed
+	window on it */
 static const uint8_t *hhm_getrec(hardhat_maker_t *hhm, uint64_t off) {
 	if(hhm->windowsize <= off) {
 		if(hhm->window != MAP_FAILED)
@@ -298,6 +349,9 @@ static const uint8_t *hhm_getrec(hardhat_maker_t *hhm, uint64_t off) {
 	return hhm->window + off;
 }
 
+/* Add an entry to the database (if it doesn't exist yet).
+	Returns true on success (or if the entry already existed!)
+	Returns false on error. */
 export bool hardhat_maker_add(hardhat_maker_t *hhm, const void *key, uint16_t keylen, const void *data, uint32_t datalen) {
 	size_t recsize, padsize;
 	static const char padding[4] = {0};
@@ -327,6 +381,8 @@ export bool hardhat_maker_add(hardhat_maker_t *hhm, const void *key, uint16_t ke
 	keylen = (uint16_t)hardhat_normalize(hhm->keybuf, key, keylen);
 	key = hhm->keybuf;
 
+	/* Check if the entry isn't already in the hash table.
+		If it is, return true. If not, add it and continue. */
 	hash = calchash(key, (size_t)keylen);
 	ht = hhm->hashtable;
 	hp = hash % ht->size;
@@ -352,6 +408,7 @@ export bool hardhat_maker_add(hardhat_maker_t *hhm, const void *key, uint16_t ke
 			hp = 0;
 	}
 
+	/* Write out the entry to disk */
 	recsize = (size_t)6 + (size_t)keylen + (size_t)datalen;
 	padsize = pad4(recsize);
 
@@ -372,6 +429,7 @@ export bool hardhat_maker_add(hardhat_maker_t *hhm, const void *key, uint16_t ke
 	if(!hhm_db_append(hhm, padding, padsize - recsize))
 		return false;
 
+	/* Add the entry offset to the list (resizing it as necessary) */
 	if(hhm->recnum == hhm->recbufsize) {
 		hhm->recbufsize *= 2;
 		buf = realloc(hhm->recbuf, hhm->recbufsize * sizeof *hhm->recbuf);
@@ -387,6 +445,7 @@ export bool hardhat_maker_add(hardhat_maker_t *hhm, const void *key, uint16_t ke
 	return true;
 }
 
+/* Add parent directory entries for all entries that do not have them yet */
 export bool hardhat_maker_parents(hardhat_maker_t *hhm, const void *data, uint32_t datalen) {
 	struct hashtable *ht;
 	uint32_t i;
@@ -408,6 +467,8 @@ export bool hardhat_maker_parents(hardhat_maker_t *hhm, const void *data, uint32
 		if(!slash)
 			continue;
 		keylen = (uint16_t)(slash - key);
+		/* Stupidly try to add them, duplicates will be detected
+			and handled by hardhat_maker_add() */
 		if(!hardhat_maker_add(hhm, key, keylen, data, datalen))
 			return false;
 	}
@@ -417,6 +478,9 @@ export bool hardhat_maker_parents(hardhat_maker_t *hhm, const void *data, uint32
 
 static hardhat_maker_t *qsort_data;
 
+/* Compare two entries from the hashtable by fetching their key values
+	and comparing them using hardhat_cmp().
+	Empty hash values always come last. */
 static int qsort_directory_cmp(const void *a, const void *b) {
 	const uint8_t *ar, *br;
 	uint32_t ad, bd;
@@ -450,6 +514,7 @@ static int qsort_directory_cmp(const void *a, const void *b) {
 	return hardhat_cmp(ar + 6, u16read(ar + 4), br + 6, u16read(br + 4));
 }
 
+/* Compare hash entries by hash value */
 static int qsort_hash_cmp(const void *a, const void *b) {
 	uint32_t am, bm;
 
@@ -459,6 +524,7 @@ static int qsort_hash_cmp(const void *a, const void *b) {
 	return am < bm ? -1 : am > bm ? 1 : 0;
 }
 
+/* Find the longest common prefix (on ‘/’ boundaries) */
 __attribute__((optimize(99)))
 static size_t common_parents(const uint8_t *a, size_t al, const uint8_t *b, size_t bl) {
 	size_t cl = 0, l, i;
@@ -478,6 +544,7 @@ static size_t common_parents(const uint8_t *a, size_t al, const uint8_t *b, size
 	return cl;
 }
 
+/* Finish up the database by writing the indexes and the superblock */
 export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 	FILE *db;
 	struct hashtable *ht;
@@ -504,6 +571,7 @@ export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 		return false;
 	}
 
+	/* Sort the hashtable in directory order */
 	ht = hhm->hashtable;
 	qsort_data = hhm;
 	qsort(ht->buf, ht->size, sizeof *ht->buf, qsort_directory_cmp);
@@ -514,6 +582,7 @@ export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 
 	hhm->superblock.directory_start = hhm->off;
 
+	/* Write out the directory using the sorted hashtable for ordering */
 	dir = hhm->recbuf;
 	for(i = 0; i < num; i++) {
 		he = ht->buf + i;
@@ -526,6 +595,7 @@ export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 
 	hhm->superblock.directory_end = hhm->off;
 
+	/* Now sort the hashtable again, this time on hash value */
 	qsort(ht->buf, num, sizeof *ht->buf, qsort_hash_cmp);
 
 	hhm->off = pad4k(hhm->off);
@@ -537,6 +607,8 @@ export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 
 	hhm->superblock.hash_start = hhm->off;
 
+	/* Write out the hashtable (which will serve as the primary
+		entry lookup table) */
 	if(!hhm_db_append(hhm, ht->buf, num * sizeof *ht->buf))
 		return false;
 
@@ -552,8 +624,11 @@ export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 	if(!hhm_getrec(hhm, hhm->superblock.directory_end))
 		return false;
 
+	/* Read back the list of offsets as we wrote it out earlier */
 	memcpy(dir, hhm->window + hhm->superblock.directory_start, sizeof *dir * num);
 
+	/* Calculate the list of common prefixes, reusing the old hash
+		table as storage */
 	prev = NULL;
 	prevlen = 0;
 	pfxnum = 0;
@@ -590,6 +665,7 @@ export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 		prevlen = curlen;
 	}
 
+	/* Write out the prefix list as a hash table */
 	qsort(ht->buf, pfxnum, sizeof *ht->buf, qsort_hash_cmp);
 
 	hhm->superblock.prefix_start = hhm->off;
@@ -606,6 +682,7 @@ export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 		return false;
 	}
 
+	/* Create and write out the superblock */
 	memcpy(hhm->superblock.magic, HARDHAT_MAGIC, sizeof hhm->superblock.magic);
 	hhm->superblock.byteorder = UINT64_C(0x0123456789ABCDEF);
 	hhm->superblock.version = UINT32_C(1);
@@ -654,6 +731,7 @@ export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 	return true;
 }
 
+/* Free a hardhat_maker_t struct and all it contains */
 export void hardhat_maker_free(hardhat_maker_t *hhm) {
 	if(!hhm)
 		return;
@@ -669,5 +747,6 @@ export void hardhat_maker_free(hardhat_maker_t *hhm) {
 		free(hhm->error);
 	*hhm = hardhat_maker_0;
 	hhm->failed = true;
+	hhm->error = "*** Use after free ***";
 	free(hhm);
 }

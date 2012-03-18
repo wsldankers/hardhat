@@ -9,10 +9,28 @@
 
 #include "hashtable.h"
 
+/******************************************************************************
+
+	Utility functions to maintain a simple hashtable that does not
+	support deletes and only stores 32-bit unsigned integers.
+
+	Functions returning bool return true on success and false
+	on failure. After they return false once, the table is unusable.
+
+	There are no functions to support lookup. To look up a value, use
+	the hash function modulo the table size to get the first possible
+	position, then iterate over the items in the table (looping at the
+	end) until you either find the entry or encounter EMPTYHASH (which
+	means the item was not in the table).
+
+******************************************************************************/
+
+/* hashtable size will always be at least twice the number of entries: */
 #define HASHSPACE 2
 
 static const struct hashtable hashtable_0 = {0};
 
+/* 32-bit integer version of a square root */
 static uint32_t sqrt32(uint32_t u) {
 	uint32_t r, p;
 
@@ -29,6 +47,7 @@ static uint32_t sqrt32(uint32_t u) {
 	return p;
 }
 
+/* naive prime test */
 static bool isprime(uint32_t u) {
 	uint32_t q;
 	for(q = sqrt32(u) + 1; q > 1; q--)
@@ -37,6 +56,7 @@ static bool isprime(uint32_t u) {
 	return true;
 }
 
+/* return a prime number that is strictly larger than u */
 uint32_t nextprime(uint32_t u) {
 	while(u < UINT32_MAX) {
 		if(isprime(u))
@@ -53,6 +73,7 @@ uint32_t nextprime(uint32_t u) {
 	return u;
 }
 
+/* return a prime number that is strictly larger than 2^order */
 static uint32_t nextorderprime(int order) {
 	uint32_t u;
 
@@ -69,6 +90,7 @@ static uint32_t nextorderprime(int order) {
 	return u;
 }
 
+/* hashing function (Fowler-Noll-Vo 1, using the same constant as bdb) */
 uint32_t calchash(const uint8_t *key, size_t len) {
 	const uint8_t *e;
 	uint32_t h;
@@ -80,6 +102,7 @@ uint32_t calchash(const uint8_t *key, size_t len) {
 	return h;
 }
 
+/* add a value at the first free slot of the hash */
 static void addhash_raw(struct hashtable *ht, uint32_t hash, uint32_t data) {
 	struct hashentry *buf;
 	uint32_t off, end;
@@ -93,6 +116,7 @@ static void addhash_raw(struct hashtable *ht, uint32_t hash, uint32_t data) {
 	buf[off].data = data;
 }
 
+/* allocate a new hash table and copy the old elements over */
 static bool rehash(struct hashtable *ht) {
 	uint32_t size, off;
 	struct hashentry *buf;
@@ -123,6 +147,7 @@ static bool rehash(struct hashtable *ht) {
 	return true;
 }
 
+/* add an element and check if the hash table hasn't become too large */
 bool addhash(struct hashtable *ht, uint32_t hash, uint32_t data) {
 	addhash_raw(ht, hash, data);
 	if(++ht->fill > ht->limit)
@@ -130,6 +155,7 @@ bool addhash(struct hashtable *ht, uint32_t hash, uint32_t data) {
 	return true;
 }
 
+/* allocate and initialize the hash table */
 struct hashtable *newhash(void) {
 	struct hashtable *ht;
 
