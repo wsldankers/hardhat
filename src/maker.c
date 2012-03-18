@@ -447,7 +447,6 @@ export bool hardhat_maker_add(hardhat_maker_t *hhm, const void *key, uint16_t ke
 
 /* Add parent directory entries for all entries that do not have them yet */
 export bool hardhat_maker_parents(hardhat_maker_t *hhm, const void *data, uint32_t datalen) {
-	struct hashtable *ht;
 	uint32_t i;
 	const uint8_t *rec, *slash, *key;
 	uint16_t keylen;
@@ -457,7 +456,6 @@ export bool hardhat_maker_parents(hardhat_maker_t *hhm, const void *data, uint32
 		return false;
 	}
 
-	ht = hhm->hashtable;
 	for(i = 0; i < hhm->recnum; i++) {
 		rec = hhm_getrec(hhm, hhm->recbuf[i]);
 		if(!rec)
