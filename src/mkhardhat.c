@@ -29,7 +29,6 @@
 #include <fcntl.h>
 #include <string.h>
 
-#include "layout.h"
 #include "maker.h"
 
 /******************************************************************************
