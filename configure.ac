@@ -4,6 +4,7 @@ AC_PREREQ(2.59)
 AC_INIT(hardhat, 1.0.0, wsl-hardhat-bugs@fruit.je)
 
 AM_INIT_AUTOMAKE()
+AC_CONFIG_MACRO_DIR([m4])
 AC_CONFIG_HEADERS([src/config.h])
 AC_CONFIG_SRCDIR([src/hardhat.c])
 AC_CONFIG_FILES([Makefile])
