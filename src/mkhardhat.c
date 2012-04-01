@@ -1,3 +1,23 @@
+/******************************************************************************
+
+    hardhat - read and write databases optimized for filename-like keys
+    Copyright (c) 2011,2012 Wessel Dankers <wsl@fruit.je>
+
+    This program is free software; you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation; either version 2 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program. If not, see <http://www.gnu.org/licenses/>.
+
+******************************************************************************/
+
 #include "config.h"
 
 #include <stdio.h>
@@ -12,8 +32,26 @@
 #include "layout.h"
 #include "maker.h"
 
+/******************************************************************************
+
+	Simple tool that creates and fills a hardhat database with the contents
+	of one or more files in cdb format. cdb format is zero or more lines in
+	the following format:
+
+		+[key length],[value length]:[key]->[value]
+
+	(The square brackets are not part of the format.) For example:
+
+		+4,5:quux->xyzzy
+
+	Line breaks must be a single \n. The file must end with an empty line
+	(i.e., an extra \n). The keys and values are binary safe.
+
+******************************************************************************/
+
 static bool errors = false;
 
+/* Read a single byte and check for errors */
 static int readchar(FILE *fh, const char *name) {
 	int c;
 	c = fgetc(fh);
@@ -29,6 +67,7 @@ static int readchar(FILE *fh, const char *name) {
 	return c;
 }
 
+/* Read multiple bytes and check for errors */
 static bool readchars(FILE *fh, const char *name, void *buf, size_t num) {
 	size_t r;
 	r = fread(buf, 1, num, fh);
@@ -45,6 +84,7 @@ static bool readchars(FILE *fh, const char *name, void *buf, size_t num) {
 	return true;
 }
 
+/* Skip a byte (but check if it's the right value) and check for errors */
 static bool skipchar(FILE *fh, const char *name, int expect) {
 	int c;
 
@@ -59,6 +99,7 @@ static bool skipchar(FILE *fh, const char *name, int expect) {
 	return false;
 }
 
+/* Read a number in ascii format from the input and check for errors */
 static uint64_t readnumber(FILE *fh, const char *name, int end) {
 	uint64_t n = 0;
 	int c;
