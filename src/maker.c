@@ -385,11 +385,11 @@ export bool hardhat_maker_add(hardhat_maker_t *hhm, const void *key, uint16_t ke
 		errno = EINVAL;
 		return false;
 	}
-	if(!key) {
+	if(!key && keylen) {
 		hhm_set_error(hhm, "key parameter to hardhat_maker_add is NULL");
 		return false;
 	}
-	if(!data) {
+	if(!data && datalen) {
 		hhm_set_error(hhm, "data parameter to hardhat_maker_add is NULL");
 		return false;
 	}
