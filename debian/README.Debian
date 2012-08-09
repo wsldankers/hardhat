@@ -1,0 +1,6 @@
+hardhat
+-------
+
+Write-once database with path semantics for keys.
+
+ -- Wessel Dankers <wsl@fruit.je>  Thu, 09 Aug 2012 13:27:11 +0200

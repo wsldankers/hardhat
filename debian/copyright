@@ -1,0 +1,14 @@
+This package was debianized by Wessel Dankers <wsl@fruit.je> on
+Thu, 09 Aug 2012 13:27:11 +0200.
+
+It can be downloaded from https://www.fruit.je/download/hardhat/
+Version control is at https://git.fruit.je/hardhat
+
+Upstream Author: Wessel Dankers <wsl@fruit.je>
+
+Copyright: 2011,2012 Wessel Dankers <wsl@fruit.je>
+
+License: GPL version 3 or any later version.
+
+The Debian packaging is (c) 2012, Wessel Dankers <wsl@fruit.je> and
+is licensed under the GPL, see '/usr/share/common-licenses/GPL'.
