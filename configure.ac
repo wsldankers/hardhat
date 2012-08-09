@@ -1,7 +1,7 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ(2.59)
-AC_INIT(hardhat, 1.0.0, wsl-hardhat-bugs@fruit.je)
+AC_INIT(hardhat,1.0.0,wsl-hardhat-bugs@fruit.je)
 
 AM_INIT_AUTOMAKE()
 AC_CONFIG_MACRO_DIR([m4])
