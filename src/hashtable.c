@@ -110,17 +110,30 @@ static uint32_t nextorderprime(int order) {
 	return u;
 }
 
-/* hashing function (Fowler-Noll-Vo 1a, using the same constant as bdb) */
+/* hashing function (Fowler-Noll-Vo 1a) */
 uint32_t calchash(const uint8_t *key, size_t len) {
 	const uint8_t *e;
 	uint32_t h;
 
 	e = key + len;
-	for(h = 0; key < e; key++)
+	for(h = UINT32_C(2166136261); key < e; key++)
 		h = (h ^ *key) * UINT32_C(16777619);
 
 	return h;
 }
+
+/*
+uint64_t calchash64(const uint8_t *key, size_t len) {
+	const uint8_t *e;
+	uint64_t h;
+
+	e = key + len;
+	for(h = UINT64_C(14695981039346656037); key < e; key++)
+		h = (h ^ *key) * UINT64_C(1099511628211);
+
+	return h;
+}
+*/
 
 /* add a value at the first free slot of the hash */
 static void addhash_raw(struct hashtable *ht, uint32_t hash, uint32_t data) {
