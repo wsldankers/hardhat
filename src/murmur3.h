@@ -1,5 +1,6 @@
 #pragma once
 
+#include <string.h>
 #include <stdint.h>
 
 void murmurhash3_x86_32(const void *key, size_t len, uint32_t seed, void *out);
