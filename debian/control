@@ -6,6 +6,7 @@ Build-Depends: cdbs, debhelper (>= 7)
 Standards-Version: 3.7.2
 
 Package: hardhat
+Section: admin
 Architecture: any
 Depends: ${shlibs:Depends}
 Description: Write-once database with filesystem semantics
@@ -24,7 +25,8 @@ Description: Write-once database with filesystem semantics
  This package provides the shared library for use in other programs.
 
 Package: libhardhat-dev
-Architecture: all
+Section: libdevel
+Architecture: any
 Depends: libhardhat0 (= ${binary:Version}), libc6-dev
 Description: Write-once database with filesystem semantics
  Store files in a write-once database. Keys can be browsed by

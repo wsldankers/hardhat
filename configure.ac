@@ -1,13 +1,10 @@
 # Process this file with autoconf to produce a configure script.
 
-AC_PREREQ(2.59)
 AC_INIT(hardhat,1.0.0,wsl-hardhat-bugs@fruit.je)
+AM_INIT_AUTOMAKE([foreign])
 
-AM_INIT_AUTOMAKE()
-AC_CONFIG_MACRO_DIR([m4])
-AC_CONFIG_HEADERS([src/config.h])
 AC_CONFIG_SRCDIR([src/hardhat.c])
-AC_CONFIG_FILES([Makefile])
+AC_CONFIG_HEADERS([src/config.h])
 
 AC_DEFINE([_GNU_SOURCE],1,[needed for some calls])
 AC_DEFINE([_XOPEN_SOURCE],500,[needed for some calls])
@@ -30,4 +27,5 @@ AC_C_CONST
 AC_TYPE_SIZE_T
 AC_FUNC_MMAP
 
+AC_CONFIG_FILES([Makefile])
 AC_OUTPUT

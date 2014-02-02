@@ -1,5 +1,3 @@
-ACLOCAL_AMFLAGS = -I m4
-
 bin_PROGRAMS = hardhat mkhardhat
 hardhat_SOURCES = src/hardhat.c
 hardhat_LDADD = libhardhat.la
