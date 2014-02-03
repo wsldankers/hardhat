@@ -27,7 +27,8 @@
 
 	Defines the hardhat superblock. Padded to 4096 bytes.
 
-	The hardhat file format uses 4 major data sections.
+	The hardhat file format uses 4 major data sections. Each section is
+	aligned to 4096 bytes.
 
 	The first is the data itself, laid out as:
 		data length (4 bytes)
@@ -38,6 +39,7 @@
 
 	The second is the directory, which is a list of offsets of all
 	key/value pairs, sorted in the order defined in hardhat_cmp().
+	These offsets are represented as 64-bit unsigned integers.
 
 	The third is a hash table of all entries, with each entry an index
 	into the directory.
@@ -48,6 +50,11 @@
 	The hash tables that are written to disk are a bastardized form of
 	hash tables that is really a sorted list of the hash values. Lookup
 	is done by doing a weighted binary search.
+
+	Each entry in the hash table is a 32-bit unsigned integer hash value
+	followed by a 32-bit unsigned integer offset into the directory.
+
+	All integers are stored in the byte order indicated in the superblock.
 
 ******************************************************************************/
 
@@ -78,7 +85,8 @@ struct hardhat_superblock {
 	uint32_t prefixes;
 	/* Padding */
 	char unused[3988];
-	/* Checksum over header, using the hashtable hash algorithm */
+	/* Checksum over the first 4092 bytes of the header, using the
+		hashtable hash algorithm */
 	uint32_t checksum;
 };
 
