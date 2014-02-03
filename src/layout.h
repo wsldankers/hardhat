@@ -32,8 +32,8 @@
 	The first is the data itself, laid out as:
 		data length (4 bytes)
 		key length (2 bytes)
-		key (up to 2^32 bytes)
-		data (up to 2^16 bytes)
+		key (up to 2^16 bytes)
+		data (up to 2^32 bytes)
 	The start of each entry is 4-byte aligned.
 
 	The second is the directory, which is a list of offsets of all
