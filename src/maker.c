@@ -30,6 +30,7 @@
 #include <fcntl.h>
 #include <string.h>
 #include <errno.h>
+#include <time.h>
 #include <sys/mman.h>
 
 #include "maker.h"
@@ -256,6 +257,23 @@ static void hhm_set_error(hardhat_maker_t *hhm, const char *fmt, ...) {
 	}
 }
 
+static uint32_t makeseed(void) {
+	struct timespec ts[5];
+	int clocks = 2;
+	clock_gettime(CLOCK_REALTIME, ts);
+	clock_gettime(CLOCK_MONOTONIC, ts + 1);
+#ifdef CLOCK_MONOTONIC_RAW
+	clock_gettime(CLOCK_MONOTONIC_RAW, ts + clocks++);
+#endif
+#ifdef CLOCK_PROCESS_CPUTIME_ID
+	clock_gettime(CLOCK_PROCESS_CPUTIME_ID, ts + clocks++);
+#endif
+#ifdef CLOCK_THREAD_CPUTIME_ID
+	clock_gettime(CLOCK_THREAD_CPUTIME_ID, ts + clocks++);
+#endif
+	return calchash_murmur3((const void *)ts, sizeof *ts * clocks, getpid());
+}
+
 /* Allocate and initialize a hardhat_maker_t structure.
 	Returns NULL on failure, with errno set to the problem. */
 export hardhat_maker_t *hardhat_maker_new(const char *filename) {
@@ -272,6 +290,8 @@ export hardhat_maker_t *hardhat_maker_new(const char *filename) {
 		return NULL;
 
 	*hhm = hardhat_maker_0;
+
+	hhm->superblock.hashseed = makeseed();
 
 	hhm->filename = strdup(filename);
 	if(!hhm->filename) {
