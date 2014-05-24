@@ -249,8 +249,6 @@ static uint32_t hhc_prefix_find(const void *hardhat, const void *str, uint16_t l
 
 	if(!recnum)
 		return CURSOR_NONE;
-	if(!hashnum)
-		return CURSOR_NONE;
 
 	buf = hardhat;
 	directory = (const uint64_t *)(buf + sb->directory_start);
@@ -265,6 +263,9 @@ static uint32_t hhc_prefix_find(const void *hardhat, const void *str, uint16_t l
 				? 1 // the first is "", so return the next one
 				: CURSOR_NONE; // the database only contains ""
 	}
+
+	if(!hashnum)
+		return CURSOR_NONE;
 
 	hash = calchash(str, len);
 	ht = (const struct hashentry *)(buf + sb->prefix_start);
