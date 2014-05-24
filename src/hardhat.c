@@ -50,7 +50,9 @@ int main(int argc, char **argv) {
 		if(c) {
 			/* loop over all entries and print the ones that cannot
 			** be found by hash lookup (should be zero) */
-			while(hardhat_fetch(c, true)) {
+			do {
+				if(!c->key)
+					continue;
 				cc = hardhat_cursor(buf, c->key, c->keylen);
 				if(!cc || !cc->key) {
 					printf("[");
@@ -62,7 +64,7 @@ int main(int argc, char **argv) {
 				if(cc)
 					hardhat_fetch(cc, true);
 				hardhat_cursor_free(cc);
-			}
+			} while(hardhat_fetch(c, true));
 		}
 		hardhat_cursor_free(c);
 	}
