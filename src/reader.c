@@ -1,7 +1,7 @@
 /******************************************************************************
 
 	hardhat - read and write databases optimized for filename-like keys
-	Copyright (c) 2011,2012 Wessel Dankers <wsl@fruit.je>
+	Copyright (c) 2011,2012,2014 Wessel Dankers <wsl@fruit.je>
 
 	This program is free software; you can redistribute it and/or modify
 	it under the terms of the GNU General Public License as published by
@@ -37,8 +37,23 @@
 #include "hashtable.h"
 #include "layout.h"
 #include "reader.h"
+#include "murmur3.h"
 
 #define export __attribute__((visibility("default")))
+
+static uint32_t hhc_calchash(const struct hardhat_superblock *sb, const uint8_t *key, size_t len) {
+	uint32_t hash;
+
+	switch(sb->version) {
+		case 1:
+			return calchash_fnv1a(key, len);
+		case 2:
+			murmurhash3_32(key, len, sb->hashseed, &hash);
+			return hash;
+		default:
+			abort();
+	}
+}
 
 export void *hardhat_open(const char *filename) {
 	void *buf;
@@ -73,8 +88,9 @@ export void *hardhat_open(const char *filename) {
 	if(memcmp(sb->magic, HARDHAT_MAGIC, sizeof sb->magic)
 	|| (off_t)sb->filesize != st.st_size
 	|| sb->byteorder != UINT64_C(0x0123456789ABCDEF)
-	|| sb->version != UINT32_C(1)
-	|| calchash((const void *)sb, sizeof *sb - 4) != sb->checksum) {
+	|| sb->version < UINT32_C(1)
+	|| sb->version > UINT32_C(2)
+	|| hhc_calchash(sb, (const void *)sb, sizeof *sb - 4) != sb->checksum) {
 		munmap(buf, (size_t)st.st_size);
 		errno = EPROTO;
 		return NULL;
@@ -82,7 +98,7 @@ export void *hardhat_open(const char *filename) {
 
 	return buf;
 }
-
+	
 export void hardhat_precache(void *buf, bool data) {
 	struct hardhat_superblock *sb;
 
@@ -177,7 +193,7 @@ static void hhc_hash_find(hardhat_cursor_t *c) {
 
 	str = c->prefix;
 	len = c->prefixlen;
-	hash = calchash(str, len);
+	hash = hhc_calchash(sb, str, len);
 	buf = c->hardhat;
 
 	ht = (const struct hashentry *)(buf + sb->hash_start);
@@ -267,7 +283,7 @@ static uint32_t hhc_prefix_find(const void *hardhat, const void *str, uint16_t l
 	if(!hashnum)
 		return CURSOR_NONE;
 
-	hash = calchash(str, len);
+	hash = hhc_calchash(sb, str, len);
 	ht = (const struct hashentry *)(buf + sb->prefix_start);
 
 	lower = 0;

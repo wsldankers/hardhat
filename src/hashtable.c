@@ -28,6 +28,7 @@
 #include <string.h>
 
 #include "hashtable.h"
+#include "murmur3.h"
 
 /******************************************************************************
 
@@ -111,7 +112,7 @@ static uint32_t nextorderprime(int order) {
 }
 
 /* hashing function (Fowler-Noll-Vo 1a) */
-uint32_t calchash(const uint8_t *key, size_t len) {
+uint32_t calchash_fnv1a(const uint8_t *key, size_t len) {
 	const uint8_t *e;
 	uint32_t h;
 
@@ -122,8 +123,14 @@ uint32_t calchash(const uint8_t *key, size_t len) {
 	return h;
 }
 
+uint32_t calchash_murmur3(const uint8_t *key, size_t len, uint32_t seed) {
+	uint32_t hash;
+	murmurhash3_32(key, len, seed, &hash);
+	return hash;
+}
+
 /*
-uint64_t calchash64(const uint8_t *key, size_t len) {
+uint64_t calchash64_fnv1a(const uint8_t *key, size_t len) {
 	const uint8_t *e;
 	uint64_t h;
 

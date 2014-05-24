@@ -83,8 +83,10 @@ struct hardhat_superblock {
 	uint32_t entries;
 	/* Number of prefixes stored */
 	uint32_t prefixes;
+	/* Seed for the hash function */
+	uint32_t hashseed;
 	/* Padding */
-	char unused[3988];
+	char unused[3984];
 	/* Checksum over the first 4092 bytes of the header, using the
 		hashtable hash algorithm */
 	uint32_t checksum;

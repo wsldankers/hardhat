@@ -241,7 +241,8 @@ static void hhm_set_error(hardhat_maker_t *hhm, const char *fmt, ...) {
 	if(!hhm)
 		return;
 
-	free(hhm->error);
+	if(hhm->error != enomem)
+		free(hhm->error);
 	hhm->error = malloc(4096);
 	if(hhm->error) {
 		va_start(ap, fmt);
@@ -403,7 +404,7 @@ export bool hardhat_maker_add(hardhat_maker_t *hhm, const void *key, uint16_t ke
 
 	/* Check if the entry isn't already in the hash table.
 		If it is, return true. If not, add it and continue. */
-	hash = calchash(key, (size_t)keylen);
+	hash = calchash_murmur3(key, (size_t)keylen, hhm->superblock.hashseed);
 	ht = hhm->hashtable;
 	hp = hash % ht->size;
 	for(;;) {
@@ -676,7 +677,7 @@ export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 				ht->buf = he;
 			}
 			he = ht->buf + pfxnum++;
-			he->hash = calchash(cur, endlen);
+			he->hash = calchash_murmur3(cur, endlen, hhm->superblock.hashseed);
 			he->data = i;
 		}
 		prev = cur;
@@ -703,11 +704,11 @@ export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 	/* Create and write out the superblock */
 	memcpy(hhm->superblock.magic, HARDHAT_MAGIC, sizeof hhm->superblock.magic);
 	hhm->superblock.byteorder = UINT64_C(0x0123456789ABCDEF);
-	hhm->superblock.version = UINT32_C(1);
+	hhm->superblock.version = UINT32_C(2);
 	hhm->superblock.entries = num;
 	hhm->superblock.prefixes = pfxnum;
 	hhm->superblock.filesize = hhm->off;
-	hhm->superblock.checksum = calchash((const void *)&hhm->superblock, sizeof hhm->superblock - 4);
+	hhm->superblock.checksum = calchash_murmur3((const void *)&hhm->superblock, sizeof hhm->superblock - 4, hhm->superblock.hashseed);
 
 	if(fseek(db, 0, SEEK_SET) == -1) {
 		hhm_set_error(hhm, "seeking in %s failed: %m", hhm->filename);

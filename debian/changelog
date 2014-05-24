@@ -1,6 +1,8 @@
-hardhat (1.0.1~0) stable; urgency=medium
+hardhat (1.1.0) stable; urgency=medium
 
   * Fix ls/find to not return the root.
+  * Switch to murmur3 hash algorithm.
+  * Bump version number.
 
  -- Wessel Dankers <wsl@fruit.je>  Sat, 24 May 2014 15:07:54 +0200
 

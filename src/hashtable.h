@@ -38,7 +38,8 @@ struct hashtable {
 
 #define EMPTYHASH UINT32_MAX
 
-extern uint32_t calchash(const uint8_t *key, size_t len);
+extern uint32_t calchash_fnv1a(const uint8_t *key, size_t len);
+extern uint32_t calchash_murmur3(const uint8_t *key, size_t len, uint32_t seed);
 extern uint32_t nextprime(uint32_t u);
 extern struct hashtable *newhash(void);
 extern bool addhash(struct hashtable *ht, uint32_t hash, uint32_t data);
