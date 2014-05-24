@@ -259,7 +259,11 @@ static uint32_t hhc_prefix_find(const void *hardhat, const void *str, uint16_t l
 		// special treatment for '' to prevent it from being
 		// returned as the first entry for itself
 		rec = buf + directory[0];
-		return u16read(rec + 4) ? 0 : recnum > 1 ? 1 : CURSOR_NONE;
+		return u16read(rec + 4)
+			? 0 // the first is not "", so use that
+			: recnum > 1
+				? 1 // the first is "", so return the next one
+				: CURSOR_NONE; // the database only contains ""
 	}
 
 	hash = calchash(str, len);
