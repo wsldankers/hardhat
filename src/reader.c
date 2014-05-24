@@ -117,7 +117,7 @@ export void hardhat_close(void *buf) {
 
 static const hardhat_cursor_t hardhat_cursor_0 = {.cur = CURSOR_NONE};
 
-__attribute__((unused))
+#if 0
 static uint32_t hhc_find(hardhat_cursor_t *c, bool recursive) {
 	const struct hardhat_superblock *sb;
 	uint32_t lower, upper, cur;
@@ -159,8 +159,9 @@ static uint32_t hhc_find(hardhat_cursor_t *c, bool recursive) {
 		}
 	}
 }
+#endif
 
-static void hhm_hash_find(hardhat_cursor_t *c) {
+static void hhc_hash_find(hardhat_cursor_t *c) {
 	const struct hashentry *he, *ht;
 	const struct hardhat_superblock *sb;
 	uint32_t i, hp, hash, recnum, upper, lower, upper_hash, lower_hash;
@@ -234,7 +235,7 @@ static void hhm_hash_find(hardhat_cursor_t *c) {
 	}
 }
 
-static uint32_t hhm_prefix_find(const void *hardhat, const void *str, uint16_t len) {
+static uint32_t hhc_prefix_find(const void *hardhat, const void *str, uint16_t len) {
 	const struct hashentry *he, *ht;
 	const struct hardhat_superblock *sb;
 	uint32_t i, hp, hash, hashnum, recnum, upper, lower, upper_hash, lower_hash;
@@ -248,16 +249,21 @@ static uint32_t hhm_prefix_find(const void *hardhat, const void *str, uint16_t l
 
 	if(!recnum)
 		return CURSOR_NONE;
-	if(!len)
-		return 0;
 	if(!hashnum)
 		return CURSOR_NONE;
 
-	hash = calchash(str, len);
 	buf = hardhat;
-
-	ht = (const struct hashentry *)(buf + sb->prefix_start);
 	directory = (const uint64_t *)(buf + sb->directory_start);
+
+	if(!len) {
+		// special treatment for '' to prevent it from being
+		// returned as the first entry for itself
+		rec = buf + directory[0];
+		return u16read(rec + 4) ? 0 : recnum > 1 ? 1 : CURSOR_NONE;
+	}
+
+	hash = calchash(str, len);
+	ht = (const struct hashentry *)(buf + sb->prefix_start);
 
 	lower = 0;
 	upper = hashnum;
@@ -339,7 +345,7 @@ export hardhat_cursor_t *hardhat_cursor(const void *hardhat, const void *prefix,
 	c->prefixlen = prefixlen = (uint16_t)hardhat_normalize(c->prefix, prefix, prefixlen);
 	c->hardhat = hardhat;
 
-	hhm_hash_find(c);
+	hhc_hash_find(c);
 
 	if(prefixlen)
 		c->prefix[prefixlen++] = '/';
@@ -366,7 +372,7 @@ export bool hardhat_fetch(hardhat_cursor_t *c, bool recursive) {
 	if(c->started)
 		cur++;
 	else
-		cur = hhm_prefix_find(buf, c->prefix, c->prefixlen);
+		cur = hhc_prefix_find(buf, c->prefix, c->prefixlen);
 
 	if(cur < sb->entries) {
 		rec = buf + directory[cur];
