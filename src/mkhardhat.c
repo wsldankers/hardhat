@@ -237,5 +237,8 @@ int main(int argc, char **argv) {
 
 	hardhat_maker_free(hhm);
 
+	free(keybuf);
+	free(databuf);
+
 	return errors;
 }
