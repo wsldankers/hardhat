@@ -21,6 +21,12 @@ AC_CHECK_HEADERS([stdint.h inttypes.h stdlib.h unistd.h fcntl.h], , [
 	exit 1
 ])
 
+#AC_CHECK_LIB(rt,clock_gettime,[LIBS="-lrt $LIBS"],[
+AC_CHECK_LIB(rt,clock_gettime,[true],[
+	AC_MSG_FAILURE([rt clock library not found.])
+	exit 1
+])
+
 # Checks for typedefs, structures, and compiler characteristics.
 AC_HEADER_STDBOOL
 AC_C_CONST
