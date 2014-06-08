@@ -1,6 +1,6 @@
 # Process this file with autoconf to produce a configure script.
 
-AC_INIT(hardhat,1.0.1,wsl-hardhat-bugs@fruit.je)
+AC_INIT(hardhat,1.1.0,wsl-hardhat-bugs@fruit.je)
 AM_INIT_AUTOMAKE([foreign subdir-objects])
 
 AC_CONFIG_SRCDIR([src/hardhat.c])
@@ -21,7 +21,6 @@ AC_CHECK_HEADERS([stdint.h inttypes.h stdlib.h unistd.h fcntl.h], , [
 	exit 1
 ])
 
-#AC_CHECK_LIB(rt,clock_gettime,[LIBS="-lrt $LIBS"],[
 AC_CHECK_LIB(rt,clock_gettime,[true],[
 	AC_MSG_FAILURE([rt clock library not found.])
 	exit 1
