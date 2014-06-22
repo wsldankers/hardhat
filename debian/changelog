@@ -1,3 +1,10 @@
+hardhat (1.1.1) stable; urgency=high
+
+  * Fix segmentation fault.
+  * Pad using writes instead of seeks.
+
+ -- Wessel Dankers <wsl@fruit.je>  Sun, 22 Jun 2014 18:51:46 +0200
+
 hardhat (1.1.0) stable; urgency=medium
 
   * Fix ls/find to not return the root.

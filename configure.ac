@@ -1,6 +1,6 @@
 # Process this file with autoconf to produce a configure script.
 
-AC_INIT(hardhat,1.1.0,wsl-hardhat-bugs@fruit.je)
+AC_INIT(hardhat,1.1.1,wsl-hardhat-bugs@fruit.je)
 AM_INIT_AUTOMAKE([foreign subdir-objects])
 
 AC_CONFIG_SRCDIR([src/hardhat.c])
