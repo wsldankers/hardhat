@@ -60,7 +60,7 @@ struct hardhat_maker {
 	/* Size of container for added records */
 	size_t recbufsize;
 	/* Offset of first unused space in output file */
-	uint64_t off;
+	off_t off;
 	/* Offset of added records */
 	uint64_t *recbuf;
 	/* Number of added records */
@@ -87,6 +87,9 @@ static const hardhat_maker_t hardhat_maker_0 = {
 	.recbufsize = 65536,
 	.window = MAP_FAILED
 };
+
+/* source buffer for padding */
+static const char padding[4096];
 
 /* Return the error (if any) or an empty string (but never NULL) */
 export const char *hardhat_maker_error(hardhat_maker_t *hhm) {
@@ -550,6 +553,13 @@ static int qsort_directory_cmp(const void *a, const void *b) {
 		return 0;
 	}
 
+	/* get the first record again: it may have moved */
+	ar = hhm_getrec(qsort_data, recs[ad]);
+	if(!ar) {
+		qsort_data = NULL;
+		return 0;
+	}
+
 	return hardhat_cmp(ar + 6, u16read(ar + 4), br + 6, u16read(br + 4));
 }
 
@@ -560,7 +570,7 @@ static int qsort_hash_cmp(const void *a, const void *b) {
 	am = ((const struct hashentry *)a)->hash;
 	bm = ((const struct hashentry *)b)->hash;
 
-	return am < bm ? -1 : am > bm ? 1 : 0;
+	return am < bm ? -1 : am != bm;
 }
 
 /* Find the longest common prefix (on ‘/’ boundaries) */
@@ -603,9 +613,7 @@ export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 
 	hhm->superblock.data_end = hhm->off;
 
-	hhm->off = pad4k(hhm->off);
-	if(fseek(db, hhm->off, SEEK_SET) == -1) {
-		hhm_set_error(hhm, "seeking in %s failed: %m", hhm->filename);
+	if(!hhm_db_append(hhm, padding, pad4k(hhm->off) - hhm->off)) {
 		hhm->failed = true;
 		return false;
 	}
@@ -637,9 +645,7 @@ export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 	/* Now sort the hashtable again, this time on hash value */
 	qsort(ht->buf, num, sizeof *ht->buf, qsort_hash_cmp);
 
-	hhm->off = pad4k(hhm->off);
-	if(fseek(db, hhm->off, SEEK_SET) == -1) {
-		hhm_set_error(hhm, "seeking in %s failed: %m", hhm->filename);
+	if(!hhm_db_append(hhm, padding, pad4k(hhm->off) - hhm->off)) {
 		hhm->failed = true;
 		return false;
 	}
@@ -653,9 +659,7 @@ export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 
 	hhm->superblock.hash_end = hhm->off;
 
-	hhm->off = pad4k(hhm->off);
-	if(fseek(db, hhm->off, SEEK_SET) == -1) {
-		hhm_set_error(hhm, "seeking in %s failed: %m", hhm->filename);
+	if(!hhm_db_append(hhm, padding, pad4k(hhm->off) - hhm->off)) {
 		hhm->failed = true;
 		return false;
 	}
@@ -714,9 +718,7 @@ export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 
 	hhm->superblock.prefix_end = hhm->off;
 
-	hhm->off = pad4k(hhm->off);
-	if(fseek(db, hhm->off, SEEK_SET) == -1) {
-		hhm_set_error(hhm, "seeking in %s failed: %m", hhm->filename);
+	if(!hhm_db_append(hhm, padding, pad4k(hhm->off) - hhm->off)) {
 		hhm->failed = true;
 		return false;
 	}
