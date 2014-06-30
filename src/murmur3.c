@@ -31,7 +31,29 @@ static FORCE_INLINE uint64_t rotl64(uint64_t x, int r) {
 
 // Block read - if your platform needs to do endian-swapping or can only
 // handle aligned reads, do the conversion here
-#define getblock(p, i) (p[i])
+#if defined(__i386__) || defined(__amd64__)
+#define getblock32(p, i) (p[i])
+#define getblock64(p, i) (p[i])
+#else
+static inline FORCE_INLINE uint32_t getblock32(const uint32_t *p, size_t off) {
+	const uint8_t *s = (const uint8_t *)(p + off);
+	return (uint32_t)s[0]
+		| ((uint32_t)s[1] << 8)
+		| ((uint32_t)s[2] << 16)
+		| ((uint32_t)s[3] << 24);
+}
+static inline FORCE_INLINE uint64_t getblock64(const uint64_t *p, size_t off) {
+	const uint8_t *s = (const uint8_t *)(p + off);
+	return (uint64_t)s[0]
+		| ((uint64_t)s[1] << 8)
+		| ((uint64_t)s[2] << 16)
+		| ((uint64_t)s[3] << 24)
+		| ((uint64_t)s[4] << 32)
+		| ((uint64_t)s[5] << 40)
+		| ((uint64_t)s[6] << 48)
+		| ((uint64_t)s[7] << 56);
+}
+#endif
 
 // Finalization mix - force all bits of a hash block to avalanche
 static inline FORCE_INLINE uint32_t fmix32(uint32_t h) {
@@ -72,7 +94,7 @@ void murmurhash3_x86_32(const void * key, size_t len, uint32_t seed, void *out) 
 	const uint32_t *blocks = (const uint32_t *)data;
 
 	for(i = 0; i < nblocks; i++) {
-		uint32_t k1 = getblock(blocks, i);
+		uint32_t k1 = getblock32(blocks, i);
 
 		k1 *= c1;
 		k1 = ROTL32(k1, 15);
@@ -133,10 +155,10 @@ void murmurhash3_x86_128(const void *key, const size_t len, uint32_t seed, void 
 	const uint32_t *blocks = (const uint32_t *)data;
 
 	for(i = 0; i < nblocks; i++) {
-		uint32_t k1 = getblock(blocks, i * 4 + 0);
-		uint32_t k2 = getblock(blocks, i * 4 + 1);
-		uint32_t k3 = getblock(blocks, i * 4 + 2);
-		uint32_t k4 = getblock(blocks, i * 4 + 3);
+		uint32_t k1 = getblock32(blocks, i * 4 + 0);
+		uint32_t k2 = getblock32(blocks, i * 4 + 1);
+		uint32_t k3 = getblock32(blocks, i * 4 + 2);
+		uint32_t k4 = getblock32(blocks, i * 4 + 3);
 
 		k1 *= c1;
 		k1 = ROTL32(k1, 15);
@@ -274,8 +296,8 @@ void murmurhash3_x64_128(const void *key, const size_t len, const uint32_t seed,
 	const uint64_t *blocks = (const uint64_t *)data;
 
 	for(i = 0; i < nblocks; i++) {
-		uint64_t k1 = getblock(blocks, i * 2 + 0);
-		uint64_t k2 = getblock(blocks, i * 2 + 1);
+		uint64_t k1 = getblock64(blocks, i * 2 + 0);
+		uint64_t k2 = getblock64(blocks, i * 2 + 1);
 
 		k1 *= c1;
 		k1 = ROTL64(k1, 31);
