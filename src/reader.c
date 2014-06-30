@@ -55,6 +55,39 @@ static uint32_t hhc_calchash(const struct hardhat_superblock *sb, const uint8_t 
 	}
 }
 
+static uint16_t hh_swab16(const struct hardhat_superblock *sb, uint16_t x) {
+	if(sb->byteorder == 0x0123456789ABCDEF)
+		return x;
+#ifdef __GNUC__
+	return __builtin_bswap16(x)
+#else
+	return (x << 8) | (x >> 8);
+#endif
+}
+
+static uint32_t hh_swab32(const struct hardhat_superblock *sb, uint32_t x) {
+	if(sb->byteorder == 0x0123456789ABCDEF)
+		return x;
+#ifdef __GNUC__
+	return __builtin_bswap32(x)
+#else
+	x = ((x & UINT32_C(0x00FF00FF)) << 8) | ((x & UINT32_C(0xFF00FF00)) >> 8);
+	return (x << 16) | (x >> 16);
+#endif
+}
+
+static uint64_t hh_swab64(const struct hardhat_superblock *sb, uint64_t x) {
+	if(sb->byteorder == 0x0123456789ABCDEF)
+		return x;
+#ifdef __GNUC__
+	return __builtin_bswap64(x)
+#else
+	x = ((x & UINT64_C(0x00FF00FF00FF00FF)) << 8) | ((x & UINT64_C(0xFF00FF00FF00FF00)) >> 8);
+	x = ((x & UINT64_C(0x0000FFFF0000FFFF)) << 16) | ((x & UINT64_C(0xFFFF0000FFFF0000)) >> 16);
+	return (x << 32) | (x >> 32);
+#endif
+}
+
 export void *hardhat_open(const char *filename) {
 	void *buf;
 	int fd, err;
@@ -86,11 +119,11 @@ export void *hardhat_open(const char *filename) {
 
 	sb = buf;
 	if(memcmp(sb->magic, HARDHAT_MAGIC, sizeof sb->magic)
-	|| (off_t)sb->filesize != st.st_size
-	|| sb->byteorder != UINT64_C(0x0123456789ABCDEF)
-	|| sb->version < UINT32_C(1)
-	|| sb->version > UINT32_C(2)
-	|| hhc_calchash(sb, (const void *)sb, sizeof *sb - 4) != sb->checksum) {
+	|| (sb->byteorder != UINT64_C(0x0123456789ABCDEF) && sb->byteorder != UINT64_C(0xFEDCBA9876543210))
+	|| (off_t)hh_swab64(sb, sb->filesize) != st.st_size
+	|| hh_swab32(sb, sb->version) < UINT32_C(1)
+	|| hh_swab32(sb, sb->version) > UINT32_C(2)
+	|| hhc_calchash(sb, (const void *)sb, sizeof *sb - 4) != hh_swab32(sb, sb->checksum)) {
 		munmap(buf, (size_t)st.st_size);
 		errno = EPROTO;
 		return NULL;
