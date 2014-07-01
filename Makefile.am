@@ -5,7 +5,7 @@ mkhardhat_SOURCES = src/mkhardhat.c
 mkhardhat_LDADD = libhardhat.la
 
 lib_LTLIBRARIES = libhardhat.la
-libhardhat_la_SOURCES = src/hashtable.c src/hashtable.h src/layout.h src/maker.c src/maker.h src/reader.c src/reader.h src/murmur3.c src/murmur3.h
+libhardhat_la_SOURCES = src/hashtable.c src/hashtable.h src/layout.h src/maker.c src/maker.h src/reader.c src/reader.h src/murmur3.c src/murmur3.h src/readerimpl.h
 libhardhat_la_LDFLAGS = -Wl,--version-script,$(srcdir)/libhardhat.ver
 libhardhat_la_LIBADD = -lrt
 
