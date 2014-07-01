@@ -26,6 +26,16 @@ AC_CHECK_LIB(rt,clock_gettime,[true],[
 	exit 1
 ])
 
+AC_LINK_IFELSE(
+	[AC_LANG_PROGRAM([],[__builtin_bswap16(0)])],
+	[AC_DEFINE([HAVE_BUILTIN_BSWAP16],1,[has GCC __builtin_bswap16 function])])
+AC_LINK_IFELSE(
+	[AC_LANG_PROGRAM([],[__builtin_bswap32(0)])],
+	[AC_DEFINE([HAVE_BUILTIN_BSWAP32],1,[has GCC __builtin_bswap32 function])])
+AC_LINK_IFELSE(
+	[AC_LANG_PROGRAM([],[__builtin_bswap64(0)])],
+	[AC_DEFINE([HAVE_BUILTIN_BSWAP64],1,[has GCC __builtin_bswap64 function])])
+
 # Checks for typedefs, structures, and compiler characteristics.
 AC_HEADER_STDBOOL
 AC_C_CONST
