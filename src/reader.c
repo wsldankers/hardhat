@@ -71,7 +71,6 @@ static uint16_t u16(uint16_t x) {
 #ifdef HAVE_BUILTIN_BSWAP32
 #define u32(x) __builtin_bswap32(x)
 #else
-#error wtf
 static uint32_t u32(uint32_t x) {
 	x = ((x & UINT32_C(0x00FF00FF)) << 8) | ((x & UINT32_C(0xFF00FF00)) >> 8);
 	return (x << 16) | (x >> 16);
