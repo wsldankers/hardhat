@@ -26,15 +26,24 @@ AC_CHECK_LIB(rt,clock_gettime,[true],[
 	exit 1
 ])
 
-AC_LINK_IFELSE(
-	[AC_LANG_PROGRAM([],[__builtin_bswap16(0)])],
-	[AC_DEFINE([HAVE_BUILTIN_BSWAP16],1,[has GCC __builtin_bswap16 function])])
-AC_LINK_IFELSE(
-	[AC_LANG_PROGRAM([],[__builtin_bswap32(0)])],
-	[AC_DEFINE([HAVE_BUILTIN_BSWAP32],1,[has GCC __builtin_bswap32 function])])
-AC_LINK_IFELSE(
-	[AC_LANG_PROGRAM([],[__builtin_bswap64(0)])],
-	[AC_DEFINE([HAVE_BUILTIN_BSWAP64],1,[has GCC __builtin_bswap64 function])])
+AC_DEFUN([MY_GCC_BUILTIN],[
+	AS_VAR_PUSHDEF([ac_var],[ax_cv_have_builtin_$1])
+
+	AC_CACHE_CHECK([for __builtin_$1],[ac_var],[
+		AC_LINK_IFELSE([AC_LANG_PROGRAM([],[__builtin_$1($2)])],
+			[AS_VAR_SET([ac_var],[yes])],[AS_VAR_SET([ac_var],[no])])
+	])
+
+	case AS_VAR_GET([ac_var]) in yes)
+		AC_DEFINE_UNQUOTED(AS_TR_CPP(HAVE_BUILTIN_$1),1,[has GCC __builtin_$1 function])
+	esac
+
+	AS_VAR_POPDEF([ac_var])
+])
+
+MY_GCC_BUILTIN(bswap16,0)
+MY_GCC_BUILTIN(bswap32,0)
+MY_GCC_BUILTIN(bswap64,0)
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_HEADER_STDBOOL
