@@ -12,5 +12,5 @@ libhardhat_la_LIBADD = -lrt
 hh_HEADERS = src/layout.h src/reader.h src/hashtable.h src/maker.h
 hhdir = $(pkgincludedir)
 
-EXTRA_DIST = makedist libhardhat.ver
+EXTRA_DIST = libhardhat.ver
 AM_CFLAGS = -std=c99 -pipe -fvisibility=hidden -Wall -Wextra -Werror -Wno-missing-field-initializers
