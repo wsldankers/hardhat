@@ -13,7 +13,7 @@
 #include "murmur3.h"
 
 #ifdef __GNUC__
-#define FORCE_INLINE __attribute__((always_inline)) inline
+#define FORCE_INLINE __attribute__((always_inline,pure,optimize(3))) inline
 #else
 #define FORCE_INLINE inline
 #endif
@@ -35,14 +35,14 @@ static FORCE_INLINE uint64_t rotl64(uint64_t x, int r) {
 #define getblock32(p, i) (p[i])
 #define getblock64(p, i) (p[i])
 #else
-static inline FORCE_INLINE uint32_t getblock32(const uint32_t *p, size_t off) {
+static FORCE_INLINE uint32_t getblock32(const uint32_t *p, size_t off) {
 	const uint8_t *s = (const uint8_t *)(p + off);
 	return (uint32_t)s[0]
 		| ((uint32_t)s[1] << 8)
 		| ((uint32_t)s[2] << 16)
 		| ((uint32_t)s[3] << 24);
 }
-static inline FORCE_INLINE uint64_t getblock64(const uint64_t *p, size_t off) {
+static FORCE_INLINE uint64_t getblock64(const uint64_t *p, size_t off) {
 	const uint8_t *s = (const uint8_t *)(p + off);
 	return (uint64_t)s[0]
 		| ((uint64_t)s[1] << 8)
