@@ -340,7 +340,7 @@ static uint32_t HHE(hhc_prefix_find)(const void *hardhat, const void *str, uint1
 			return CURSOR_NONE;
 	}
 
-	for(u = hp + 1; u < hashnum; u++) {
+	for(u = hp; u < hashnum; u++) {
 		he = ht + u;
 		he_hash = u32(he->hash);
 		if(he_hash != hash)
@@ -359,7 +359,11 @@ static uint32_t HHE(hhc_prefix_find)(const void *hardhat, const void *str, uint1
             return CURSOR_NONE;
 		if(keylen < len || memcmp(rec + 6, str, len))
 			continue;
+		reclen += u32read(rec);
+		if(off + reclen < off || off + reclen > data_end)
+			return CURSOR_NONE;
 		if(he_data) {
+			/* check if the prefix we found is actually the first one */
 			off = u64(directory[he_data - 1]);
 			reclen = 6;
 			if(off < data_start || off + reclen < off || off + reclen > data_end || off % sizeof(uint32_t))
@@ -372,13 +376,10 @@ static uint32_t HHE(hhc_prefix_find)(const void *hardhat, const void *str, uint1
 			if(keylen >= len && !memcmp(rec + 6, str, len))
 				continue;
 		}
-		reclen += u32read(rec);
-		if(off + reclen < off || off + reclen > data_end)
-			return CURSOR_NONE;
 		return he_data;
 	}
 
-	for(u = hp; u < hashnum; u--) {
+	for(u = hp - 1; u < hashnum; u--) {
 		he = ht + u;
 		he_hash = u32(he->hash);
 		if(he_hash != hash)
@@ -397,7 +398,11 @@ static uint32_t HHE(hhc_prefix_find)(const void *hardhat, const void *str, uint1
             return CURSOR_NONE;
 		if(keylen < len || memcmp(rec + 6, str, len))
 			continue;
+		reclen += u32read(rec);
+		if(off + reclen < off || off + reclen > data_end)
+			return CURSOR_NONE;
 		if(he_data) {
+			/* check if the prefix we found is actually the first one */
 			off = u64(directory[he_data - 1]);
 			reclen = 6;
 			if(off < data_start || off + reclen < off || off + reclen > data_end || off % sizeof(uint32_t))
@@ -410,9 +415,6 @@ static uint32_t HHE(hhc_prefix_find)(const void *hardhat, const void *str, uint1
 			if(keylen >= len && !memcmp(rec + 6, str, len))
 				continue;
 		}
-		reclen += u32read(rec);
-		if(off + reclen < off || off + reclen > data_end)
-			return CURSOR_NONE;
 		return he_data;
 	}
 
