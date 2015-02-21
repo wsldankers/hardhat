@@ -125,6 +125,7 @@ static void HHE(hardhat_precache)(void *buf, bool data) {
 	} else {
 		madvise((uint8_t *)buf + u64(sb->hash_start), u64(sb->hash_end) - u64(sb->hash_start), MADV_WILLNEED);
 		madvise((uint8_t *)buf + u64(sb->directory_start), u64(sb->directory_end) - u64(sb->directory_start), MADV_WILLNEED);
+		madvise((uint8_t *)buf + u64(sb->prefix_start), u64(sb->prefix_end) - u64(sb->prefix_start), MADV_WILLNEED);
 	}
 }
 
