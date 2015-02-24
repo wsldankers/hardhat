@@ -1,2 +1,2 @@
-usr/lib/*.{a,la,so}
+usr/lib/*/*.{a,la,so}
 usr/include

@@ -1,6 +1,7 @@
-hardhat (1.1.2~0) UNRELEASED; urgency=medium
+hardhat (1.1.2) stable; urgency=medium
 
   * Sanity checks for untrusted input.
+  * Bump debian/compat to 9.
 
  -- Wessel Dankers <W.S.L.Dankers@uvt.nl>  Fri, 20 Feb 2015 13:21:42 +0100
 
