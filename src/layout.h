@@ -69,6 +69,7 @@ struct hardhat_superblock {
 	uint64_t byteorder;
 	/* Database version */
 	uint32_t version;
+	uint32_t padding;
 	/* Size of the database file, to detect truncated databases */
 	uint64_t filesize;
 	/* Start and end of the section containing the entries themselves */

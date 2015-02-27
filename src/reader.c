@@ -70,7 +70,7 @@ static int sectioncmp(const void *ap, const void *bp) {
 #undef u64
 
 #ifdef HAVE_BUILTIN_BSWAP16
-#define u16(x) __builtin_bswap16(x)
+#define u16(x) ((uint16_t)__builtin_bswap16(x))
 #else
 __attribute__((const,optimize(3)))
 static inline uint16_t u16(uint16_t x) {
@@ -79,7 +79,7 @@ static inline uint16_t u16(uint16_t x) {
 #endif
 
 #ifdef HAVE_BUILTIN_BSWAP32
-#define u32(x) __builtin_bswap32(x)
+#define u32(x) ((uint32_t)__builtin_bswap32(x))
 #else
 __attribute__((const,optimize(3)))
 static inline uint32_t u32(uint32_t x) {
@@ -89,7 +89,7 @@ static inline uint32_t u32(uint32_t x) {
 #endif
 
 #ifdef HAVE_BUILTIN_BSWAP64
-#define u64(x) __builtin_bswap64(x)
+#define u64(x) ((uint64_t)__builtin_bswap64(x))
 #else
 __attribute__((const,optimize(3)))
 static inline uint64_t u64(uint64_t x) {
@@ -108,7 +108,7 @@ export void *hardhat_open(const char *filename) {
 	void *buf;
 	int fd, err;
 	struct stat st;
-	struct hardhat_superblock *sb;
+	const struct hardhat_superblock *sb;
 
 	fd = open(filename, O_RDONLY|O_NOCTTY|O_LARGEFILE);
 	if(fd == -1)
@@ -134,10 +134,12 @@ export void *hardhat_open(const char *filename) {
 	}
 
 	sb = buf;
-	if(!memcmp(sb->magic, HARDHAT_MAGIC, sizeof sb->magic)
-		&& ((sb->byteorder == UINT64_C(0x0123456789ABCDEF) && hhc_validate_ne(sb, &st))
-			|| (sb->byteorder == u64(UINT64_C(0x0123456789ABCDEF)) && hhc_validate_oe(sb, &st))))
-		return buf;
+	if(!memcmp(sb->magic, HARDHAT_MAGIC, sizeof sb->magic)) {
+		if(sb->byteorder == UINT64_C(0x0123456789ABCDEF) && hhc_validate_ne(sb, &st))
+			return buf;
+		if(sb->byteorder == u64(UINT64_C(0x0123456789ABCDEF)) && hhc_validate_oe(sb, &st))
+			return buf;
+	}
 
 	munmap(buf, (size_t)st.st_size);
 	errno = EPROTO;
