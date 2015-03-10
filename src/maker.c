@@ -132,8 +132,7 @@ export size_t hardhat_normalize(uint8_t *dst, const uint8_t *src, size_t size) {
 			// do nothing
 		} else if(len == 2 && src[0] == '.' && src[1] == '.') {
 			end = memrchr(dst, '/', (size_t)(cur - dst));
-			if(end)
-				cur = end;
+			cur = end ? end : dst;
 		} else {
 			if(cur > dst)
 				*cur++ = '/';
