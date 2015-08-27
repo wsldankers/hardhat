@@ -108,7 +108,6 @@ export void *hardhat_open(const char *filename) {
 	void *buf;
 	int fd, err;
 	struct stat st;
-	const struct hardhat_superblock *sb;
 
 	fd = open(filename, O_RDONLY|O_NOCTTY|O_LARGEFILE);
 	if(fd == -1)
@@ -119,7 +118,7 @@ export void *hardhat_open(const char *filename) {
 		return NULL;
 	}
 
-	if(st.st_size < (off_t)sizeof *sb) {
+	if(st.st_size < (off_t)sizeof(struct hardhat_superblock)) {
 		close(fd);
 		errno = EPROTO;
 		return NULL;
@@ -133,17 +132,13 @@ export void *hardhat_open(const char *filename) {
 		return NULL;
 	}
 
-	sb = buf;
-	if(!memcmp(sb->magic, HARDHAT_MAGIC, sizeof sb->magic)) {
-		if(sb->byteorder == UINT64_C(0x0123456789ABCDEF) && hhc_validate_ne(sb, &st))
-			return buf;
-		if(sb->byteorder == u64(UINT64_C(0x0123456789ABCDEF)) && hhc_validate_oe(sb, &st))
-			return buf;
+	if(!hhc_validate_ne(buf, &st) && !hhc_validate_oe(buf, &st)) {
+		munmap(buf, (size_t)st.st_size);
+		errno = EPROTO;
+		return NULL;
 	}
 
-	munmap(buf, (size_t)st.st_size);
-	errno = EPROTO;
-	return NULL;
+	return buf;
 }
 	
 export void hardhat_precache(void *hardhat, bool do_data) {
@@ -152,10 +147,9 @@ export void hardhat_precache(void *hardhat, bool do_data) {
 	if(!hardhat)
 		return;
 
-	if(sb->byteorder == UINT64_C(0x0123456789ABCDEF))
-		hardhat_precache_ne(hardhat, do_data);
-	else
-		hardhat_precache_oe(hardhat, do_data);
+	return sb->byteorder == UINT64_C(0x0123456789ABCDEF)
+		? hardhat_precache_ne(hardhat, do_data)
+		: hardhat_precache_oe(hardhat, do_data);
 }
 
 export void hardhat_close(void *hardhat) {
@@ -164,17 +158,16 @@ export void hardhat_close(void *hardhat) {
 	if(!hardhat)
 		return;
 
-	if(sb->byteorder == UINT64_C(0x0123456789ABCDEF))
-		hardhat_close_ne(hardhat);
-	else
-		hardhat_close_oe(hardhat);
+	return sb->byteorder == UINT64_C(0x0123456789ABCDEF)
+		? hardhat_close_ne(hardhat)
+		: hardhat_close_oe(hardhat);
 }
 
 export hardhat_cursor_t *hardhat_cursor(const void *hardhat, const void *prefix, uint16_t prefixlen) {
 	const struct hardhat_superblock *sb = hardhat;
 	hardhat_cursor_t *c;
 
-	if(!hardhat || memcmp(hardhat, HARDHAT_MAGIC, strlen(HARDHAT_MAGIC))) {
+	if(!hardhat) {
 		errno = EINVAL;
 		return NULL;
 	}

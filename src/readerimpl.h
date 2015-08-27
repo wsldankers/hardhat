@@ -39,6 +39,12 @@ static uint32_t HHE(hhc_calchash)(const struct hardhat_superblock *sb, const uin
 static bool HHE(hhc_validate)(const struct hardhat_superblock *sb, const struct stat *st) {
 	uint64_t sections[8];
 
+	if(memcmp(sb->magic, HARDHAT_MAGIC, sizeof sb->magic))
+		return false;
+
+	if(u64(sb->byteorder) != UINT64_C(0x0123456789ABCDEF))
+		return false;
+
 	if((off_t)u64(sb->filesize) != st->st_size)
 		return false;
 
