@@ -113,11 +113,14 @@ export bool hardhat_maker_fatal(hardhat_maker_t *hhm) {
 	- remove occurrences of .
 	- resolve occurrences of ..
 */
-__attribute__((optimize(99)))
-export size_t hardhat_normalize(uint8_t *dst, const uint8_t *src, size_t size) {
-	uint8_t *cur, *end;
-	const uint8_t *sep, *nul;
+__attribute__((optimize(3)))
+export size_t hardhat_normalize(void *to, const void *from, size_t size) {
+	uint8_t *dst, *cur, *end;
+	const uint8_t *src, *sep, *nul;
 	size_t len;
+
+	dst = to;
+	src = from;
 
 	nul = src + size;
 	cur = dst;
@@ -161,7 +164,7 @@ export size_t hardhat_normalize(uint8_t *dst, const uint8_t *src, size_t size) {
 	x/a/2
 	x/b/1
 */
-__attribute__((optimize(99)))
+__attribute__((optimize(3)))
 export int hardhat_cmp(const void *a, size_t al, const void *b, size_t bl) {
 	const uint8_t *as, *bs, *ap, *bp;
 	uint8_t ac = 0, bc = 0;
@@ -573,7 +576,7 @@ static int qsort_hash_cmp(const void *a, const void *b) {
 }
 
 /* Find the longest common prefix (on ‘/’ boundaries) */
-__attribute__((optimize(99)))
+__attribute__((optimize(3)))
 static size_t common_parents(const uint8_t *a, size_t al, const uint8_t *b, size_t bl) {
 	size_t cl = 0, l, i;
 	uint8_t ac, bc;

@@ -92,4 +92,13 @@ extern bool hardhat_fetch(hardhat_cursor_t *c, bool recursive);
 /* Frees the cursor and associated storage */
 extern void hardhat_cursor_free(hardhat_cursor_t *c);
 
+/* Utility function: normalize a path according to hardhat's rules.
+   Returns the size of the result string. The destination buffer should
+   be at least as large as the source buffer. In place conversions are
+   supported (simply pass the same pointer for src and dst. */
+extern size_t hardhat_normalize(void *dst, const void *src, size_t size);
+
+/* Utility function: compare two paths according to hardhat's rules. */
+extern int hardhat_cmp(const void *a, size_t al, const void *b, size_t bl);
+
 #endif

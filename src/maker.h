@@ -68,7 +68,7 @@ extern void hardhat_maker_free(hardhat_maker_t *hhm);
    Returns the size of the result string. The destination buffer should
    be at least as large as the source buffer. In place conversions are
    supported (simply pass the same pointer for src and dst. */
-extern size_t hardhat_normalize(uint8_t *dst, const uint8_t *src, size_t size);
+extern size_t hardhat_normalize(void *dst, const void *src, size_t size);
 
 /* Utility function: compare two paths according to hardhat's rules. */
 extern int hardhat_cmp(const void *a, size_t al, const void *b, size_t bl);
