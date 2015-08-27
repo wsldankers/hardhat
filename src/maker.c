@@ -263,12 +263,21 @@ static void hhm_set_error(hardhat_maker_t *hhm, const char *fmt, ...) {
 }
 
 static uint32_t makeseed(void) {
-	struct timespec ts[5];
-	int clocks = 2;
-	clock_gettime(CLOCK_REALTIME, ts);
-	clock_gettime(CLOCK_MONOTONIC, ts + 1);
+	struct timespec ts[8];
+	int clocks = 0;
+	clock_gettime(CLOCK_REALTIME, ts + clocks++);
+#ifdef CLOCK_REALTIME_COARSE
+	clock_gettime(CLOCK_REALTIME_COARSE, ts + clocks++);
+#endif
+	clock_gettime(CLOCK_MONOTONIC, ts + clocks++);
+#ifdef CLOCK_MONOTONIC_COARSE
+	clock_gettime(CLOCK_MONOTONIC_COARSE, ts + clocks++);
+#endif
 #ifdef CLOCK_MONOTONIC_RAW
 	clock_gettime(CLOCK_MONOTONIC_RAW, ts + clocks++);
+#endif
+#ifdef CLOCK_BOOTTIME
+	clock_gettime(CLOCK_BOOTTIME, ts + clocks++);
 #endif
 #ifdef CLOCK_PROCESS_CPUTIME_ID
 	clock_gettime(CLOCK_PROCESS_CPUTIME_ID, ts + clocks++);
@@ -436,7 +445,10 @@ export bool hardhat_maker_add(hardhat_maker_t *hhm, const void *key, uint16_t ke
 		value = ht->buf[hp].data;
 		if(value == EMPTYHASH) {
 			if(!addhash(ht, hash, hhm->recnum)) {
-				hhm->error = enomem;
+				if(hhm->error != enomem) {
+					free(hhm->error);
+					hhm->error = enomem;
+				}
 				hhm->failed = true;
 				return false;
 			}
@@ -480,7 +492,10 @@ export bool hardhat_maker_add(hardhat_maker_t *hhm, const void *key, uint16_t ke
 		hhm->recbufsize *= 2;
 		buf = realloc(hhm->recbuf, hhm->recbufsize * sizeof *hhm->recbuf);
 		if(!buf) {
-			hhm->error = enomem;
+			if(hhm->error != enomem) {
+				free(hhm->error);
+				hhm->error = enomem;
+			}
 			hhm->failed = true;
 			return false;
 		}
@@ -696,8 +711,10 @@ export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 				he = realloc(ht->buf, ht->size * sizeof *ht->buf);
 				if(!he) {
 					hhm->failed = true;
-					free(hhm->error);
-					hhm->error = enomem;
+					if(hhm->error != enomem) {
+						free(hhm->error);
+						hhm->error = enomem;
+					}
 					return false;
 				}
 				ht->buf = he;
