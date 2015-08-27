@@ -25,6 +25,9 @@
 #include <stdbool.h>
 #include <stdlib.h>
 
+/* Opaque structure for open hardhat databases */
+typedef const struct hardhat hardhat_t;
+
 /* Cursor for lookups. All fields are read-only, some are private.
    This structure represents a single entry in the database, but
    also contains enough information about the query that found it
@@ -32,7 +35,7 @@
    Private values are subject to change without notice. */
 typedef struct hardhat_cursor {
 	/* Pointer to hardhat handle. Private! */
-	const void *hardhat;
+	hardhat_t *hardhat;
 	/* Pointer to key value, not \0 terminated. */
 	const void *key;
 	/* Pointer to data value, not \0 terminated. */
@@ -56,20 +59,20 @@ typedef struct hardhat_cursor {
 /* Open a hardhat database for querying. Returns NULL (and sets errno)
    on failure. EPROTO means that the database is invalid, corrupted or
    otherwise unusable. */
-extern void *hardhat_open(const char *filename);
+extern hardhat_t *hardhat_open(const char *filename);
 
 /* Fill the buffer cache so that subsequent accesses are not limited by
    rotational storage seektimes. May block. */
-extern void hardhat_precache(void *buf, bool data);
+extern void hardhat_precache(hardhat_t *, bool data);
 
 /* Close the hardhat database. */
-extern void hardhat_close(void *hardhat);
+extern void hardhat_close(hardhat_t *hardhat);
 
 /* Search for an entry. If an error occurs, NULL is returned and errno set.
    Otherwise a hardhat_cursor_t structure is returned, with the key, data,
    keylen, and datalen values set.
    If the entry was not found, the key and data fields are NULL. */
-extern hardhat_cursor_t *hardhat_cursor(const void *hardhat, const void *prefix, uint16_t prefixlen);
+extern hardhat_cursor_t *hardhat_cursor(hardhat_t *, const void *prefix, uint16_t prefixlen);
 
 /* Return the next entry for a cursor. This will return only entries that
    have names strictly underneath the searched path. If recursive is false,

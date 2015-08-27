@@ -104,7 +104,7 @@ static inline uint64_t u64(uint64_t x) {
 #include "readerimpl.h"
 /* keep the other-endian #defines so we can use them below */
 
-export void *hardhat_open(const char *filename) {
+export hardhat_t *hardhat_open(const char *filename) {
 	void *buf;
 	int fd, err;
 	struct stat st;
@@ -118,7 +118,7 @@ export void *hardhat_open(const char *filename) {
 		return NULL;
 	}
 
-	if(st.st_size < (off_t)sizeof(struct hardhat_superblock)) {
+	if(st.st_size < (off_t)sizeof(struct hardhat)) {
 		close(fd);
 		errno = EPROTO;
 		return NULL;
@@ -141,30 +141,25 @@ export void *hardhat_open(const char *filename) {
 	return buf;
 }
 	
-export void hardhat_precache(void *hardhat, bool do_data) {
-	const struct hardhat_superblock *sb = hardhat;
-
+export void hardhat_precache(hardhat_t *hardhat, bool do_data) {
 	if(!hardhat)
 		return;
 
-	return sb->byteorder == UINT64_C(0x0123456789ABCDEF)
+	return hardhat->byteorder == UINT64_C(0x0123456789ABCDEF)
 		? hardhat_precache_ne(hardhat, do_data)
 		: hardhat_precache_oe(hardhat, do_data);
 }
 
-export void hardhat_close(void *hardhat) {
-	const struct hardhat_superblock *sb = hardhat;
-
+export void hardhat_close(hardhat_t *hardhat) {
 	if(!hardhat)
 		return;
 
-	return sb->byteorder == UINT64_C(0x0123456789ABCDEF)
+	return hardhat->byteorder == UINT64_C(0x0123456789ABCDEF)
 		? hardhat_close_ne(hardhat)
 		: hardhat_close_oe(hardhat);
 }
 
-export hardhat_cursor_t *hardhat_cursor(const void *hardhat, const void *prefix, uint16_t prefixlen) {
-	const struct hardhat_superblock *sb = hardhat;
+export hardhat_cursor_t *hardhat_cursor(hardhat_t *hardhat, const void *prefix, uint16_t prefixlen) {
 	hardhat_cursor_t *c;
 
 	if(!hardhat) {
@@ -180,7 +175,7 @@ export hardhat_cursor_t *hardhat_cursor(const void *hardhat, const void *prefix,
 	c->prefixlen = prefixlen = (uint16_t)hardhat_normalize(c->prefix, prefix, prefixlen);
 	c->hardhat = hardhat;
 
-	if(sb->byteorder == UINT64_C(0x0123456789ABCDEF))
+	if(hardhat->byteorder == UINT64_C(0x0123456789ABCDEF))
 		hhc_hash_find_ne(c);
 	else
 		hhc_hash_find_oe(c);
@@ -197,14 +192,14 @@ export void hardhat_cursor_free(hardhat_cursor_t *c) {
 }
 
 export bool hardhat_fetch(hardhat_cursor_t *c, bool recursive) {
-	const struct hardhat_superblock *sb;
+	hardhat_t *hardhat;
 
 	if(!c)
 		return false;
 
-	sb = c->hardhat;
+	hardhat = c->hardhat;
 
-	return sb->byteorder == UINT64_C(0x0123456789ABCDEF)
+	return hardhat->byteorder == UINT64_C(0x0123456789ABCDEF)
 		? hardhat_fetch_ne(c, recursive)
 		: hardhat_fetch_oe(c, recursive);
 }

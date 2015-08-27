@@ -75,7 +75,7 @@ struct hardhat_maker {
 	/* Indicates what went wrong in case of failure */
 	char *error;
 	/* The superblock, as it will be created at the end */
-	struct hardhat_superblock superblock;
+	struct hardhat superblock;
 };
 
 /* The only case in which it is impossible to allocate the

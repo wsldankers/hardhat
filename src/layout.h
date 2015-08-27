@@ -60,7 +60,7 @@
 
 #define HARDHAT_MAGIC "*HARDHAT"
 
-struct hardhat_superblock {
+struct hardhat {
 	/* Magic value to detect files of this type,
 		should always be HARDHAT_MAGIC */
 	char magic[8];

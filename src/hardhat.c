@@ -29,7 +29,7 @@
 /* test program to exercise a hardhat database */
 
 int main(int argc, char **argv) {
-	void *buf;
+	hardhat_t *buf;
 	hardhat_cursor_t *c, *cc;
 	int i;
 
