@@ -265,25 +265,33 @@ static void hhm_set_error(hardhat_maker_t *hhm, const char *fmt, ...) {
 static uint32_t makeseed(void) {
 	struct timespec ts[8];
 	int clocks = 0;
-	clock_gettime(CLOCK_REALTIME, ts + clocks++);
-#ifdef CLOCK_REALTIME_COARSE
-	clock_gettime(CLOCK_REALTIME_COARSE, ts + clocks++);
-#endif
-	clock_gettime(CLOCK_MONOTONIC, ts + clocks++);
-#ifdef CLOCK_MONOTONIC_COARSE
-	clock_gettime(CLOCK_MONOTONIC_COARSE, ts + clocks++);
-#endif
-#ifdef CLOCK_MONOTONIC_RAW
-	clock_gettime(CLOCK_MONOTONIC_RAW, ts + clocks++);
-#endif
-#ifdef CLOCK_BOOTTIME
-	clock_gettime(CLOCK_BOOTTIME, ts + clocks++);
-#endif
+	if(!clock_gettime(CLOCK_REALTIME, ts + clocks))
+		clocks++;
+	if(!clock_gettime(CLOCK_MONOTONIC, ts + clocks))
+		clocks++;
 #ifdef CLOCK_PROCESS_CPUTIME_ID
-	clock_gettime(CLOCK_PROCESS_CPUTIME_ID, ts + clocks++);
+	if(!clock_gettime(CLOCK_PROCESS_CPUTIME_ID, ts + clocks))
+		clocks++;
 #endif
 #ifdef CLOCK_THREAD_CPUTIME_ID
-	clock_gettime(CLOCK_THREAD_CPUTIME_ID, ts + clocks++);
+	if(!clock_gettime(CLOCK_THREAD_CPUTIME_ID, ts + clocks))
+		clocks++;
+#endif
+#ifdef CLOCK_MONOTONIC_RAW
+	if(!clock_gettime(CLOCK_MONOTONIC_RAW, ts + clocks))
+		clocks++;
+#endif
+#ifdef CLOCK_REALTIME_COARSE
+	if(!clock_gettime(CLOCK_REALTIME_COARSE, ts + clocks))
+		clocks++;
+#endif
+#ifdef CLOCK_MONOTONIC_COARSE
+	if(!clock_gettime(CLOCK_MONOTONIC_COARSE, ts + clocks))
+		clocks++;
+#endif
+#ifdef CLOCK_BOOTTIME
+	if(!clock_gettime(CLOCK_BOOTTIME, ts + clocks))
+		clocks++;
 #endif
 	return calchash_murmur3((const void *)ts, sizeof *ts * clocks, getpid());
 }
