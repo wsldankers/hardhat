@@ -32,6 +32,9 @@
 #include <errno.h>
 #include <time.h>
 #include <sys/mman.h>
+#if defined(HAVE___FPURGE) && defined(HAVE_STDIO_EXT_H)
+#include <stdio_ext.h>
+#endif
 
 #include "maker.h"
 #include "hashtable.h"
@@ -803,8 +806,23 @@ export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 export void hardhat_maker_free(hardhat_maker_t *hhm) {
 	if(!hhm)
 		return;
-	if(hhm->db)
+	if(hhm->db) {
+		/* Various gambits to prevent flushing the buffer.
+		** Unfinished shutdown may be due to a fork(), in which case
+		** our flushing could theoretically corrupt the result. */
+#if defined(HAVE_FPURGE)
+		fpurge(hhm->db);
+#elif defined(HAVE___FPURGE)
+		__fpurge(hhm->db);
+#elif defined(HAVE_FILENO)
+		int fd = open("/dev/null", O_NOCTTY|O_WRONLY);
+		if(fd != -1) {
+			dup2(fd, fileno(hhm->db));
+			close(fd);
+		}
+#endif
 		fclose(hhm->db);
+	}
 	freehash(hhm->hashtable);
 	free(hhm->keybuf);
 	free(hhm->recbuf);
