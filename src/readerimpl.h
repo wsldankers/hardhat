@@ -182,19 +182,20 @@ static void HHE(hhc_hash_find)(hardhat_cursor_t *c) {
 
 	/* binary search for the hash value */
 	for(;;) {
-		hp = lower + (uint32_t)((uint64_t)(hash - lower_hash) * (uint64_t)(upper - lower) / (uint64_t)(upper_hash - lower_hash));
+		hp = lower + (uint32_t)((uint64_t)(hash - lower_hash) * (uint64_t)(upper - lower) / ((uint64_t)(upper_hash - lower_hash) + UINT64_C(1)));
 		he = ht + hp;
+		// fprintf(stderr, "%s:%d lower=%"PRIu32" upper=%"PRIu32" hash=0x%08"PRIx32" hp=%"PRIu32" lower_hash=0x%08"PRIx32" upper_hash=0x%08"PRIx32"\n", __FILE__, __LINE__, lower, upper, hash, hp, lower_hash, upper_hash);
 		he_hash = u32(he->hash);
-		if(he_hash < hash) {
+		if(he_hash == hash) {
+			break;
+		} else if(he_hash < hash) {
 			lower = hp + 1;
 			lower_hash = he_hash;
-		} else if(he_hash > hash) {
+		} else {
 			upper = hp;
 			upper_hash = he_hash;
-		} else {
-			break;
 		}
-		if(lower == upper)
+		if(lower == upper || lower_hash == upper_hash)
 			return;
 	}
 
@@ -268,7 +269,6 @@ static void HHE(hhc_hash_find)(hardhat_cursor_t *c) {
 			return;
 		}
 	}
-
 }
 
 static uint32_t HHE(hhc_prefix_find)(hardhat_t *hardhat, const void *str, uint16_t len) {
@@ -334,20 +334,20 @@ static uint32_t HHE(hhc_prefix_find)(hardhat_t *hardhat, const void *str, uint16
 	upper_hash = UINT32_MAX;
 
 	for(;;) {
-		hp = lower + (uint32_t)((uint64_t)(hash - lower_hash) * (uint64_t)(upper - lower) / (uint64_t)(upper_hash - lower_hash));
+		hp = lower + (uint32_t)((uint64_t)(hash - lower_hash) * (uint64_t)(upper - lower) / ((uint64_t)(upper_hash - lower_hash) + UINT64_C(1)));
 		he = ht + hp;
 
 		he_hash = u32(he->hash);
-		if(he_hash < hash) {
+		if(he_hash == hash) {
+			break;
+		} else if(he_hash < hash) {
 			lower = hp + 1;
 			lower_hash = he_hash;
-		} else if(he_hash > hash) {
+		} else {
 			upper = hp;
 			upper_hash = he_hash;
-		} else {
-			break;
 		}
-		if(lower == upper)
+		if(lower == upper || lower_hash == upper_hash)
 			return CURSOR_NONE;
 	}
 
