@@ -1,4 +1,4 @@
-hardhat (1.1.5) UNRELEASED; urgency=medium
+hardhat (1.1.5) stable; urgency=medium
 
   * Fix infinite loop bug.
 
