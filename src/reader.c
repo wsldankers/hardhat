@@ -150,6 +150,12 @@ export void hardhat_precache(hardhat_t *hardhat, bool do_data) {
 		: hardhat_precache_oe(hardhat, do_data);
 }
 
+export void hardhat_debug_dump(hardhat_t *hardhat) {
+	return hardhat->byteorder == UINT64_C(0x0123456789ABCDEF)
+		? hardhat_debug_dump_ne(hardhat)
+		: hardhat_debug_dump_oe(hardhat);
+}
+
 export void hardhat_close(hardhat_t *hardhat) {
 	if(!hardhat)
 		return;

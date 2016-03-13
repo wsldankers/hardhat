@@ -591,14 +591,63 @@ static int qsort_directory_cmp(const void *a, const void *b) {
 	return hardhat_cmp(ar + 6, u16read(ar + 4), br + 6, u16read(br + 4));
 }
 
-/* Compare hash entries by hash value */
+/* Compare hash entries by hash value, with string comparison as a tie breaker. */
 static int qsort_hash_cmp(const void *a, const void *b) {
-	uint32_t am, bm;
+	const uint8_t *ar, *br;
+	uint32_t ad, bd;
+	uint16_t al, bl;
+	const uint64_t *recs;
+	int r;
 
-	am = ((const struct hashentry *)a)->hash;
-	bm = ((const struct hashentry *)b)->hash;
+	ad = ((const struct hashentry *)a)->hash;
+	bd = ((const struct hashentry *)b)->hash;
 
-	return am < bm ? -1 : am != bm;
+	if(ad == bd) {
+		if(!qsort_data)
+			return 0;
+
+		ad = ((const struct hashentry *)a)->data;
+		bd = ((const struct hashentry *)b)->data;
+
+		if(ad == UINT32_MAX)
+			return bd == UINT32_MAX ? 0 : 1;
+		else if(bd == UINT32_MAX)
+			return -1;
+
+		recs = qsort_data->recbuf;
+
+		ar = hhm_getrec(qsort_data, recs[ad]);
+		if(!ar) {
+			qsort_data = NULL;
+			return 0;
+		}
+
+		br = hhm_getrec(qsort_data, recs[bd]);
+		if(!br) {
+			qsort_data = NULL;
+			return 0;
+		}
+
+		/* get the first record again: the memory mapping may have moved */
+		ar = hhm_getrec(qsort_data, recs[ad]);
+		if(!ar) {
+			qsort_data = NULL;
+			return 0;
+		}
+
+		al = u16read(ar + 4);
+		bl = u16read(br + 4);
+
+		if(al < bl) {
+			r = memcmp(ar + 6, br + 6, al);
+			return r ? r : -1;
+		} else {
+			r = memcmp(ar + 6, br + 6, bl);
+			return r ? r : al != bl;
+		}
+	}
+
+	return ad < bd ? -1 : 1;
 }
 
 /* Find the longest common prefix (on ‘/’ boundaries) */
@@ -638,8 +687,8 @@ export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 
 	db = hhm->db;
 	num = hhm->recnum;
-
 	hhm->superblock.data_end = hhm->off;
+	qsort_data = hhm;
 
 	if(!hhm_db_append(hhm, padding, pad4k(hhm->off) - hhm->off)) {
 		hhm->failed = true;
@@ -648,7 +697,6 @@ export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 
 	/* Sort the hashtable in directory order */
 	ht = hhm->hashtable;
-	qsort_data = hhm;
 	qsort(ht->buf, ht->size, sizeof *ht->buf, qsort_directory_cmp);
 	if(!qsort_data) {
 		hhm->failed = true;
@@ -669,6 +717,12 @@ export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 	}
 
 	hhm->superblock.directory_end = hhm->off;
+
+	if(!hhm_getrec(hhm, hhm->superblock.directory_end))
+		return false;
+
+	/* Read back the list of offsets as we wrote it out earlier */
+	memcpy(dir, hhm->window + hhm->superblock.directory_start, sizeof *dir * num);
 
 	/* Now sort the hashtable again, this time on hash value */
 	qsort(ht->buf, num, sizeof *ht->buf, qsort_hash_cmp);
@@ -691,12 +745,6 @@ export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 		hhm->failed = true;
 		return false;
 	}
-
-	if(!hhm_getrec(hhm, hhm->superblock.directory_end))
-		return false;
-
-	/* Read back the list of offsets as we wrote it out earlier */
-	memcpy(dir, hhm->window + hhm->superblock.directory_start, sizeof *dir * num);
 
 	/* Calculate the list of common prefixes, reusing the old hash
 		table as storage */
@@ -756,7 +804,7 @@ export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 	/* Create and write out the superblock */
 	memcpy(hhm->superblock.magic, HARDHAT_MAGIC, sizeof hhm->superblock.magic);
 	hhm->superblock.byteorder = UINT64_C(0x0123456789ABCDEF);
-	hhm->superblock.version = UINT32_C(2);
+	hhm->superblock.version = UINT32_C(3);
 	hhm->superblock.entries = num;
 	hhm->superblock.prefixes = pfxnum;
 	hhm->superblock.filesize = hhm->off;

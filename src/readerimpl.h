@@ -29,6 +29,7 @@ static uint32_t HHE(hhc_calchash)(hardhat_t *hardhat, const uint8_t *key, size_t
 		case 1:
 			return calchash_fnv1a(key, len);
 		case 2:
+		case 3:
 			murmurhash3_32(key, len, u32(hardhat->hashseed), &hash);
 			return hash;
 		default:
@@ -48,7 +49,7 @@ static bool HHE(hhc_validate)(hardhat_t *hardhat, const struct stat *st) {
 	if((off_t)u64(hardhat->filesize) != st->st_size)
 		return false;
 
-	if(u32(hardhat->version) < UINT32_C(1) || u32(hardhat->version) > UINT32_C(2))
+	if(u32(hardhat->version) < UINT32_C(1) || u32(hardhat->version) > UINT32_C(3))
 		return false;
 
 	if(HHE(hhc_calchash)(hardhat, (const void *)hardhat, sizeof *hardhat - 4) != u32(hardhat->checksum))
@@ -152,6 +153,37 @@ static void HHE(hardhat_close)(hardhat_t *hardhat) {
 	munmap(cc.u8ptr, (size_t)u64(hardhat->filesize));
 }
 
+static void HHE(hardhat_debug_dump)(hardhat_t *hardhat) {
+	const struct hashentry *he, *ht;
+	uint32_t u;
+	const uint64_t *directory;
+	const uint8_t *rec, *buf;
+
+	buf = (const uint8_t *)hardhat;
+	directory = (const uint64_t *)(buf + u64(hardhat->directory_start));
+
+	fprintf(stderr, "main hash:\n");
+	ht = (const struct hashentry *)(buf + u64(hardhat->hash_start));
+	for(u = 0; u < u32(hardhat->entries); u++) {
+		he = ht + u;
+		rec = buf + u64(directory[u32(he->data)]);
+		fprintf(stderr, "\thash: 0x%08"PRIx32", data: %"PRId32", key: '", u32(he->hash), u32(he->data));
+		fwrite(rec + 6, 1, u16read(rec + 4), stderr);
+		fprintf(stderr, "'\n");
+	}
+
+	fprintf(stderr, "prefix hash:\n");
+	ht = (const struct hashentry *)(buf + u64(hardhat->prefix_start));
+	for(u = 0; u < u32(hardhat->prefixes); u++) {
+		he = ht + u;
+		rec = buf + u64(directory[u32(he->data)]);
+		fprintf(stderr, "\thash: 0x%08"PRIx32", data: %"PRId32", key: '", u32(he->hash), u32(he->data));
+		fwrite(rec + 6, 1, u16read(rec + 4), stderr);
+		fprintf(stderr, "'\n");
+	}
+
+}
+
 static void HHE(hhc_hash_find)(hardhat_cursor_t *c) {
 	const struct hashentry *he, *ht;
 	const struct hardhat *hardhat;
@@ -161,6 +193,7 @@ static void HHE(hhc_hash_find)(hardhat_cursor_t *c) {
 	const uint64_t *directory;
 	const uint8_t *rec, *buf;
 	const void *str;
+	int r;
 
 	hardhat = c->hardhat;
 	recnum = u32(hardhat->entries);
@@ -175,10 +208,17 @@ static void HHE(hhc_hash_find)(hardhat_cursor_t *c) {
 	ht = (const struct hashentry *)(buf + u64(hardhat->hash_start));
 	directory = (const uint64_t *)(buf + u64(hardhat->directory_start));
 
+	data_start = u64(hardhat->data_start);
+	data_end = u64(hardhat->data_end);
+
 	lower = 0;
 	upper = recnum;
 	lower_hash = 0;
 	upper_hash = UINT32_MAX;
+
+fprintf(stderr, "looking for: '");
+fwrite(str, 1, len, stderr);
+fprintf(stderr, "'.\n");
 
 	/* binary search for the hash value */
 	for(;;) {
@@ -187,7 +227,58 @@ static void HHE(hhc_hash_find)(hardhat_cursor_t *c) {
 		// fprintf(stderr, "%s:%d lower=%"PRIu32" upper=%"PRIu32" hash=0x%08"PRIx32" hp=%"PRIu32" lower_hash=0x%08"PRIx32" upper_hash=0x%08"PRIx32"\n", __FILE__, __LINE__, lower, upper, hash, hp, lower_hash, upper_hash);
 		he_hash = u32(he->hash);
 		if(he_hash == hash) {
-			break;
+			if(u32(hardhat->version) < 3)
+				break;
+			he_data = u32(he->data);
+			if(he_data >= recnum)
+				return;
+			off = u64(directory[he_data]);
+			reclen = 6;
+			if(off < data_start || off + reclen < off || off + reclen > data_end || off % sizeof(uint32_t))
+				return;
+			rec = buf + off;
+			keylen = u16read(rec + 4);
+			reclen += keylen;
+			if(off + reclen < off || off + reclen > data_end)
+				return;
+			if(keylen < len) {
+				/* found key is shorter than the reference key */
+				r = memcmp(rec + 6, str, keylen);
+				if(r > 0) {
+					/* found key is shorter but lexicographically bigger */
+					upper = hp;
+					upper_hash = he_hash;
+				} else {
+					/* found key is sorted before the reference key either because
+					** it is shorter or lexicographically smaller or both. */
+					lower = hp + 1;
+					lower_hash = he_hash;
+				}
+			} else {
+				r = memcmp(rec + 6, str, len);
+				if(keylen == len && !r) {
+					datalen = u32read(rec);
+					reclen += datalen;
+					if(off + reclen < off || off + reclen > data_end)
+						return;
+					c->cur = he_data;
+					c->key = rec + 6;
+					c->keylen = keylen;
+					c->data = rec + 6 + keylen;
+					c->datalen = datalen;
+					return;
+				}
+				if(r < 0) {
+					/* found key is lexicographically smaller */
+					lower = hp + 1;
+					lower_hash = he_hash;
+				} else {
+					/* found key is sorted after the reference key because it is
+					** either longer or lexicographically larger or both. */
+					upper = hp;
+					upper_hash = he_hash;
+				}
+			}
 		} else if(he_hash < hash) {
 			lower = hp + 1;
 			lower_hash = he_hash;
@@ -199,12 +290,10 @@ static void HHE(hhc_hash_find)(hardhat_cursor_t *c) {
 			return;
 	}
 
-	data_start = u64(hardhat->data_start);
-	data_end = u64(hardhat->data_end);
-
 	/* There may be multiple keys with the correct hash value.
-	** We need to search up and down to find the real key by
-	** comparing key values. */
+	** In older database versions, the keys were not sorted, so
+	** we need to search up and down to find the real key by
+	** comparing key values one by one. */
 
 	/* search upward to find the real value */
 	for(u = hp; u < recnum; u++) {
@@ -278,6 +367,7 @@ static uint32_t HHE(hhc_prefix_find)(hardhat_t *hardhat, const void *str, uint16
 	uint16_t keylen;
 	const uint64_t *directory;
 	const uint8_t *rec, *buf;
+	int r;
 
 	recnum = u32(hardhat->entries);
 	hashnum = u32(hardhat->prefixes);
@@ -339,7 +429,66 @@ static uint32_t HHE(hhc_prefix_find)(hardhat_t *hardhat, const void *str, uint16
 
 		he_hash = u32(he->hash);
 		if(he_hash == hash) {
-			break;
+			if(u32(hardhat->version) < 3)
+				break;
+			he_data = u32(he->data);
+			if(he_data >= recnum)
+				return CURSOR_NONE;
+			off = u64(directory[he_data]);
+			reclen = 6;
+			if(off < data_start || off + reclen < off || off + reclen > data_end || off % sizeof(uint32_t))
+				return CURSOR_NONE;
+			rec = buf + off;
+			keylen = u16read(rec + 4);
+			reclen += keylen;
+			if(off + reclen < off || off + reclen > data_end)
+				return CURSOR_NONE;
+			if(keylen < len) {
+				/* found key is shorter than the reference key */
+				r = memcmp(rec + 6, str, keylen);
+				if(r > 0) {
+					/* found key is shorter but lexicographically bigger */
+					upper = hp;
+					upper_hash = he_hash;
+				} else {
+					/* found key is sorted before the reference key either because
+					** it is shorter or lexicographically smaller or both. */
+					lower = hp + 1;
+					lower_hash = he_hash;
+				}
+			} else {
+				r = memcmp(rec + 6, str, len);
+				if(!r) {
+					reclen += u32read(rec);
+					if(off + reclen < off || off + reclen > data_end)
+						return CURSOR_NONE;
+					if(he_data) {
+						/* check if the prefix we found is actually the first one */
+						off = u64(directory[he_data - 1]);
+						reclen = 6;
+						if(off < data_start || off + reclen < off || off + reclen > data_end || off % sizeof(uint32_t))
+							return CURSOR_NONE;
+						rec = buf + off;
+						keylen = u16read(rec + 4);
+						reclen += keylen;
+						if(off + reclen < off || off + reclen > data_end)
+							return CURSOR_NONE;
+						if(keylen >= len && !memcmp(rec + 6, str, len))
+							goto not_done_after_all;
+					}
+					return he_data;
+					not_done_after_all: ;
+				} else if(r < 0) {
+					/* found key is lexicographically smaller */
+					lower = hp + 1;
+					lower_hash = he_hash;
+				} else {
+					/* found key is sorted after the reference key because it is
+					** either longer or lexicographically larger or both. */
+					upper = hp;
+					upper_hash = he_hash;
+				}
+			}
 		} else if(he_hash < hash) {
 			lower = hp + 1;
 			lower_hash = he_hash;

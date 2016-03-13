@@ -68,6 +68,8 @@ extern void hardhat_precache(hardhat_t *, bool data);
 /* Close the hardhat database. */
 extern void hardhat_close(hardhat_t *hardhat);
 
+extern void hardhat_debug_dump(hardhat_t *hardhat);
+
 /* Search for an entry. If an error occurs, NULL is returned and errno set.
    Otherwise a hardhat_cursor_t structure is returned, with the key, data,
    keylen, and datalen values set.
