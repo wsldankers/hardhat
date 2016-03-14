@@ -466,22 +466,23 @@ static uint32_t HHE(hhc_prefix_find)(hardhat_t *hardhat, const void *str, uint16
 					reclen += u32read(rec);
 					if(off + reclen < off || off + reclen > data_end)
 						return CURSOR_NONE;
-					if(he_data) {
-						/* check if the prefix we found is actually the first one */
-						off = u64(directory[he_data - 1]);
-						reclen = 6;
-						if(off < data_start || off + reclen < off || off + reclen > data_end || off % sizeof(uint32_t))
-							return CURSOR_NONE;
-						rec = buf + off;
-						keylen = u16read(rec + 4);
-						reclen += keylen;
-						if(off + reclen < off || off + reclen > data_end)
-							return CURSOR_NONE;
-						if(keylen >= len && !memcmp(rec + 6, str, len))
-							goto not_done_after_all;
-					}
-					return he_data;
-					not_done_after_all: ;
+
+					if(!he_data)
+						return he_data;
+
+					/* check if the prefix we found is actually the first one */
+					off = u64(directory[he_data - 1]);
+					reclen = 6;
+					if(off < data_start || off + reclen < off || off + reclen > data_end || off % sizeof(uint32_t))
+						return CURSOR_NONE;
+					rec = buf + off;
+					keylen = u16read(rec + 4);
+					reclen += keylen;
+					if(off + reclen < off || off + reclen > data_end)
+						return CURSOR_NONE;
+					if(keylen < len || memcmp(rec + 6, str, len))
+						return he_data;
+					/* bummer, it isn't the first one. proceed as usual */
 				}
 				if(r < 0) {
 					/* found key is lexicographically smaller */
