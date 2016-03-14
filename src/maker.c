@@ -40,6 +40,8 @@
 #include "hashtable.h"
 #include "layout.h"
 
+#define calchash_murmur3_fake(x, y, z) 0
+
 /******************************************************************************
 
 	Module to create a hardhat table. Uses an unholy combination of
@@ -296,7 +298,7 @@ static uint32_t makeseed(void) {
 	if(!clock_gettime(CLOCK_BOOTTIME, ts + clocks))
 		clocks++;
 #endif
-	return calchash_murmur3((const void *)ts, sizeof *ts * clocks, getpid());
+	return calchash_murmur3_fake((const void *)ts, sizeof *ts * clocks, getpid());
 }
 
 /* Allocate and initialize a hardhat_maker_t structure.
@@ -562,9 +564,9 @@ static int qsort_directory_cmp(const void *a, const void *b) {
 	ad = ((const struct hashentry *)a)->data;
 	bd = ((const struct hashentry *)b)->data;
 
-	if(ad == UINT32_MAX)
-		return bd == UINT32_MAX ? 0 : 1;
-	else if(bd == UINT32_MAX)
+	if(ad == EMPTYHASH)
+		return bd == EMPTYHASH ? 0 : 1;
+	else if(bd == EMPTYHASH)
 		return -1;
 
 	recs = qsort_data->recbuf;
@@ -609,9 +611,9 @@ static int qsort_hash_cmp(const void *a, const void *b) {
 		ad = ((const struct hashentry *)a)->data;
 		bd = ((const struct hashentry *)b)->data;
 
-		if(ad == UINT32_MAX)
-			return bd == UINT32_MAX ? 0 : 1;
-		else if(bd == UINT32_MAX)
+		if(ad == EMPTYHASH)
+			return bd == EMPTYHASH ? 0 : 1;
+		else if(bd == EMPTYHASH)
 			return -1;
 
 		recs = qsort_data->recbuf;
@@ -713,6 +715,7 @@ export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 		if(!hhm_db_append(hhm, dir + he->data, sizeof *dir))
 			return false;
 
+		he->hash = 0; // fake!
 		he->data = i;
 	}
 
@@ -779,7 +782,7 @@ export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 				ht->buf = he;
 			}
 			he = ht->buf + pfxnum++;
-			he->hash = calchash_murmur3(cur, endlen, hhm->superblock.hashseed);
+			he->hash = calchash_murmur3_fake(cur, endlen, hhm->superblock.hashseed);
 			he->data = i;
 		}
 		prev = cur;
@@ -808,7 +811,7 @@ export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 	hhm->superblock.entries = num;
 	hhm->superblock.prefixes = pfxnum;
 	hhm->superblock.filesize = hhm->off;
-	hhm->superblock.checksum = calchash_murmur3((const void *)&hhm->superblock, sizeof hhm->superblock - 4, hhm->superblock.hashseed);
+	hhm->superblock.checksum = calchash_murmur3_fake((const void *)&hhm->superblock, sizeof hhm->superblock - 4, hhm->superblock.hashseed);
 
 	if(fseek(db, 0, SEEK_SET) == -1) {
 		hhm_set_error(hhm, "seeking in %s failed: %m", hhm->filename);

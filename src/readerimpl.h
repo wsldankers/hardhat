@@ -29,9 +29,10 @@ static uint32_t HHE(hhc_calchash)(hardhat_t *hardhat, const uint8_t *key, size_t
 		case 1:
 			return calchash_fnv1a(key, len);
 		case 2:
-		case 3:
 			murmurhash3_32(key, len, u32(hardhat->hashseed), &hash);
 			return hash;
+		case 3:
+			return 0;
 		default:
 			abort();
 	}
@@ -162,24 +163,24 @@ static void HHE(hardhat_debug_dump)(hardhat_t *hardhat) {
 	buf = (const uint8_t *)hardhat;
 	directory = (const uint64_t *)(buf + u64(hardhat->directory_start));
 
-	fprintf(stderr, "main hash:\n");
+	puts("main hash:");
 	ht = (const struct hashentry *)(buf + u64(hardhat->hash_start));
 	for(u = 0; u < u32(hardhat->entries); u++) {
 		he = ht + u;
 		rec = buf + u64(directory[u32(he->data)]);
-		fprintf(stderr, "\thash: 0x%08"PRIx32", data: %"PRId32", key: '", u32(he->hash), u32(he->data));
-		fwrite(rec + 6, 1, u16read(rec + 4), stderr);
-		fprintf(stderr, "'\n");
+		printf("\thash: 0x%08"PRIx32", data: %"PRId32", key: '", u32(he->hash), u32(he->data));
+		fwrite(rec + 6, 1, u16read(rec + 4), stdout);
+		puts("'");
 	}
 
-	fprintf(stderr, "prefix hash:\n");
+	puts("prefix hash:");
 	ht = (const struct hashentry *)(buf + u64(hardhat->prefix_start));
 	for(u = 0; u < u32(hardhat->prefixes); u++) {
 		he = ht + u;
 		rec = buf + u64(directory[u32(he->data)]);
-		fprintf(stderr, "\thash: 0x%08"PRIx32", data: %"PRId32", key: '", u32(he->hash), u32(he->data));
-		fwrite(rec + 6, 1, u16read(rec + 4), stderr);
-		fprintf(stderr, "'\n");
+		printf("\thash: 0x%08"PRIx32", data: %"PRId32", key: '", u32(he->hash), u32(he->data));
+		fwrite(rec + 6, 1, u16read(rec + 4), stdout);
+		puts("'");
 	}
 
 }
@@ -193,6 +194,7 @@ static void HHE(hhc_hash_find)(hardhat_cursor_t *c) {
 	const uint64_t *directory;
 	const uint8_t *rec, *buf;
 	const void *str;
+	unsigned int tries = 0;
 	int r;
 
 	hardhat = c->hardhat;
@@ -216,15 +218,13 @@ static void HHE(hhc_hash_find)(hardhat_cursor_t *c) {
 	lower_hash = 0;
 	upper_hash = UINT32_MAX;
 
-fprintf(stderr, "looking for: '");
-fwrite(str, 1, len, stderr);
-fprintf(stderr, "'.\n");
-
 	/* binary search for the hash value */
 	for(;;) {
-		hp = lower + (uint32_t)((uint64_t)(hash - lower_hash) * (uint64_t)(upper - lower) / ((uint64_t)(upper_hash - lower_hash) + UINT64_C(1)));
+		hp = tries++ < 10
+			? lower + (uint32_t)((uint64_t)(hash - lower_hash) * (uint64_t)(upper - lower) / ((uint64_t)(upper_hash - lower_hash) + UINT64_C(1)))
+			: lower + (upper - lower) / 2;
 		he = ht + hp;
-		// fprintf(stderr, "%s:%d lower=%"PRIu32" upper=%"PRIu32" hash=0x%08"PRIx32" hp=%"PRIu32" lower_hash=0x%08"PRIx32" upper_hash=0x%08"PRIx32"\n", __FILE__, __LINE__, lower, upper, hash, hp, lower_hash, upper_hash);
+//		fprintf(stderr, "%s:%d tries=%u lower=%"PRIu32" upper=%"PRIu32" hp=%"PRIu32" hash=0x%08"PRIx32" lower_hash=0x%08"PRIx32" upper_hash=0x%08"PRIx32"\n", __FILE__, __LINE__, tries, lower, upper, hp, hash, lower_hash, upper_hash);
 		he_hash = u32(he->hash);
 		if(he_hash == hash) {
 			if(u32(hardhat->version) < 3)
@@ -286,7 +286,7 @@ fprintf(stderr, "'.\n");
 			upper = hp;
 			upper_hash = he_hash;
 		}
-		if(lower == upper || lower_hash == upper_hash)
+		if(lower == upper || (lower_hash == upper_hash && lower_hash != hash))
 			return;
 	}
 
@@ -368,6 +368,7 @@ static uint32_t HHE(hhc_prefix_find)(hardhat_t *hardhat, const void *str, uint16
 	const uint64_t *directory;
 	const uint8_t *rec, *buf;
 	int r;
+	unsigned int tries = 0;
 
 	recnum = u32(hardhat->entries);
 	hashnum = u32(hardhat->prefixes);
@@ -424,8 +425,11 @@ static uint32_t HHE(hhc_prefix_find)(hardhat_t *hardhat, const void *str, uint16
 	upper_hash = UINT32_MAX;
 
 	for(;;) {
-		hp = lower + (uint32_t)((uint64_t)(hash - lower_hash) * (uint64_t)(upper - lower) / ((uint64_t)(upper_hash - lower_hash) + UINT64_C(1)));
+		hp = tries++ < 10
+			? lower + (uint32_t)((uint64_t)(hash - lower_hash) * (uint64_t)(upper - lower) / ((uint64_t)(upper_hash - lower_hash) + UINT64_C(1)))
+			: lower + (upper - lower) / 2;
 		he = ht + hp;
+//		fprintf(stderr, "%s:%d tries=%u lower=%"PRIu32" upper=%"PRIu32" hp=%"PRIu32" hash=0x%08"PRIx32" lower_hash=0x%08"PRIx32" upper_hash=0x%08"PRIx32"\n", __FILE__, __LINE__, tries, lower, upper, hp, hash, lower_hash, upper_hash);
 
 		he_hash = u32(he->hash);
 		if(he_hash == hash) {
@@ -478,7 +482,8 @@ static uint32_t HHE(hhc_prefix_find)(hardhat_t *hardhat, const void *str, uint16
 					}
 					return he_data;
 					not_done_after_all: ;
-				} else if(r < 0) {
+				}
+				if(r < 0) {
 					/* found key is lexicographically smaller */
 					lower = hp + 1;
 					lower_hash = he_hash;
@@ -496,7 +501,7 @@ static uint32_t HHE(hhc_prefix_find)(hardhat_t *hardhat, const void *str, uint16
 			upper = hp;
 			upper_hash = he_hash;
 		}
-		if(lower == upper || lower_hash == upper_hash)
+		if(lower == upper || (lower_hash == upper_hash && lower_hash != hash))
 			return CURSOR_NONE;
 	}
 
