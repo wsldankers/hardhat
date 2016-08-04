@@ -223,20 +223,22 @@ export int hardhat_cmp(const void *a, size_t al, const void *b, size_t bl) {
 
 /* Calculate padding for 4-byte alignment */
 static size_t pad4(size_t x) {
-	size_t p;
-	p = x & 3;
-	if(p)
-		return x + 4 - p;
-	return x;
+	return -x % 4;
 }
 
 /* Calculate padding for 4096-byte alignment */
 static size_t pad4k(size_t x) {
-	size_t p;
-	p = x & 4095;
-	if(p)
-		return x + 4096 - p;
-	return x;
+	return -x % 4096;
+}
+
+static size_t adaptive_padding(size_t offset, size_t length, size_t elsize, size_t pagesize) {
+	size_t align = -offset % elsize;
+	offset += align;
+	size_t rest = pagesize - (length % pagesize);
+	size_t gap = -offset % pagesize;
+	if(rest > gap)
+		return gap;
+	return align;
 }
 
 /* Convenience macros to fetch aligned n-bit values */
