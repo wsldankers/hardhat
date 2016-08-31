@@ -29,10 +29,10 @@ static uint32_t HHE(hhc_calchash)(hardhat_t *hardhat, const uint8_t *key, size_t
 		case 1:
 			return calchash_fnv1a(key, len);
 		case 2:
+		case 3:
+		case 4:
 			murmurhash3_32(key, len, u32(hardhat->hashseed), &hash);
 			return hash;
-		case 3:
-			return 0;
 		default:
 			abort();
 	}

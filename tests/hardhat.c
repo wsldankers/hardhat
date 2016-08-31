@@ -66,6 +66,8 @@ int main(void) {
 
 	hardhat_maker_free(hhm);
 
+	tap(hardhat_open(filename), NULL, "open the hardhat for reading");
+
 	printf("1..%u\n", testcounter);
 	return 0;
 }
