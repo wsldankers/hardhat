@@ -86,8 +86,15 @@ struct hardhat {
 	uint32_t prefixes;
 	/* Seed for the hash function */
 	uint32_t hashseed;
+	/* Checksum over the previous bytes of the header, using the
+		hashtable hash algorithm */
+	uint32_t checksum;
+};
+
+struct oldhardhat {
+	struct hardhat hardhat;
 	/* Padding */
-	char unused[3984];
+	char unused[3980];
 	/* Checksum over the first 4092 bytes of the header, using the
 		hashtable hash algorithm */
 	uint32_t checksum;

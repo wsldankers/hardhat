@@ -40,8 +40,6 @@
 #include "hashtable.h"
 #include "layout.h"
 
-#define calchash_murmur3_fake(x, y, z) 0
-
 /******************************************************************************
 
 	Module to create a hardhat table. Uses an unholy combination of
@@ -93,8 +91,9 @@ static const hardhat_maker_t hardhat_maker_0 = {
 	.window = MAP_FAILED
 };
 
+#define HARDHAT_PAGESIZE ((size_t)4096)
 /* source buffer for padding */
-static const char padding[4096];
+static const char padding[HARDHAT_PAGESIZE];
 
 /* Return the error (if any) or an empty string (but never NULL) */
 export const char *hardhat_maker_error(hardhat_maker_t *hhm) {
@@ -221,27 +220,6 @@ export int hardhat_cmp(const void *a, size_t al, const void *b, size_t bl) {
 	return ac < bc ? -1 : 1;
 }
 
-/* Calculate padding for 4-byte alignment */
-static size_t pad4(size_t x) {
-	return -x % 4;
-}
-
-/* Calculate padding for 4096-byte alignment */
-static size_t pad4k(size_t x) {
-	return -x % 4096;
-}
-
-__attribute__((unused))
-static size_t adaptive_padding(size_t offset, size_t length, size_t elsize, size_t pagesize) {
-	size_t align = -offset % elsize;
-	offset += align;
-	size_t rest = pagesize - (length % pagesize);
-	size_t gap = -offset % pagesize;
-	if(rest > gap)
-		return gap;
-	return align;
-}
-
 /* Convenience macros to fetch aligned n-bit values */
 #define u16read(buf) (*(uint16_t *)(buf))
 #define u32read(buf) (*(uint32_t *)(buf))
@@ -301,7 +279,7 @@ static uint32_t makeseed(void) {
 	if(!clock_gettime(CLOCK_BOOTTIME, ts + clocks))
 		clocks++;
 #endif
-	return calchash_murmur3_fake((const void *)ts, sizeof *ts * clocks, getpid());
+	return calchash_murmur3((const void *)ts, sizeof *ts * clocks, getpid());
 }
 
 /* Allocate and initialize a hardhat_maker_t structure.
@@ -347,7 +325,7 @@ export hardhat_maker_t *hardhat_maker_new(const char *filename) {
 		return NULL;
 	}
 
-	hhm->off = 4096;
+	hhm->off = sizeof hhm->superblock;
 	if(fseek(hhm->db, hhm->off, SEEK_SET) == -1) {
 		err = errno;
 		hardhat_maker_free(hhm);
@@ -397,6 +375,23 @@ static bool hhm_db_append(hardhat_maker_t *hhm, const void *buf, size_t len) {
 	return true;
 }
 
+static bool hhm_db_pad(hardhat_maker_t *hhm, size_t length, size_t elsize) {
+	size_t offset, align, start, end;
+
+	offset = hhm->off;
+
+	align = -offset % elsize;
+	offset += align;
+
+	start = offset % HARDHAT_PAGESIZE;
+	end = HARDHAT_PAGESIZE - -(offset + length) % HARDHAT_PAGESIZE;
+
+	if(start > end)
+		align += -offset % HARDHAT_PAGESIZE;
+
+	return hhm_db_append(hhm, padding, align);
+}
+
 /* Fetch already written bytes from the database by maintaining a mmap()ed
 	window on it */
 static const uint8_t *hhm_getrec(hardhat_maker_t *hhm, uint64_t off) {
@@ -424,8 +419,7 @@ static const uint8_t *hhm_getrec(hardhat_maker_t *hhm, uint64_t off) {
 	Returns true on success (or if the entry already existed!)
 	Returns false on error. */
 export bool hardhat_maker_add(hardhat_maker_t *hhm, const void *key, uint16_t keylen, const void *data, uint32_t datalen) {
-	size_t recsize, padsize;
-	static const char padding[4] = {0};
+	size_t recsize;
 	uint32_t hash, hp, value;
 	uint64_t off;
 	struct hashtable *ht;
@@ -482,9 +476,11 @@ export bool hardhat_maker_add(hardhat_maker_t *hhm, const void *key, uint16_t ke
 			hp = 0;
 	}
 
-	/* Write out the entry to disk */
 	recsize = (size_t)6 + (size_t)keylen + (size_t)datalen;
-	padsize = pad4(recsize);
+
+	/* Write out the entry to disk */
+	if(!hhm_db_pad(hhm, recsize, 4))
+		return false;
 
 	off = hhm->off;
 
@@ -498,9 +494,6 @@ export bool hardhat_maker_add(hardhat_maker_t *hhm, const void *key, uint16_t ke
 		return false;
 
 	if(!hhm_db_append(hhm, data, datalen))
-		return false;
-
-	if(!hhm_db_append(hhm, padding, padsize - recsize))
 		return false;
 
 	/* Add the entry offset to the list (resizing it as necessary) */
@@ -695,7 +688,7 @@ export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 	hhm->superblock.data_end = hhm->off;
 	qsort_data = hhm;
 
-	if(!hhm_db_append(hhm, padding, pad4k(hhm->off) - hhm->off)) {
+	if(!hhm_db_pad(hhm, num * sizeof *dir, sizeof *dir)) {
 		hhm->failed = true;
 		return false;
 	}
@@ -718,7 +711,6 @@ export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 		if(!hhm_db_append(hhm, dir + he->data, sizeof *dir))
 			return false;
 
-		he->hash = 0; // fake!
 		he->data = i;
 	}
 
@@ -733,7 +725,7 @@ export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 	/* Now sort the hashtable again, this time on hash value */
 	qsort(ht->buf, num, sizeof *ht->buf, qsort_hash_cmp);
 
-	if(!hhm_db_append(hhm, padding, pad4k(hhm->off) - hhm->off)) {
+	if(!hhm_db_pad(hhm, num * sizeof *ht->buf, sizeof *ht->buf)) {
 		hhm->failed = true;
 		return false;
 	}
@@ -746,11 +738,6 @@ export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 		return false;
 
 	hhm->superblock.hash_end = hhm->off;
-
-	if(!hhm_db_append(hhm, padding, pad4k(hhm->off) - hhm->off)) {
-		hhm->failed = true;
-		return false;
-	}
 
 	/* Calculate the list of common prefixes, reusing the old hash
 		table as storage */
@@ -785,7 +772,7 @@ export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 				ht->buf = he;
 			}
 			he = ht->buf + pfxnum++;
-			he->hash = calchash_murmur3_fake(cur, endlen, hhm->superblock.hashseed);
+			he->hash = calchash_murmur3(cur, endlen, hhm->superblock.hashseed);
 			he->data = i;
 		}
 		prev = cur;
@@ -795,6 +782,11 @@ export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 	/* Write out the prefix list as a hash table */
 	qsort(ht->buf, pfxnum, sizeof *ht->buf, qsort_hash_cmp);
 
+	if(!hhm_db_pad(hhm, pfxnum  * sizeof *ht->buf, sizeof *ht->buf)) {
+		hhm->failed = true;
+		return false;
+	}
+
 	hhm->superblock.prefix_start = hhm->off;
 
 	if(!hhm_db_append(hhm, ht->buf, pfxnum * sizeof *ht->buf))
@@ -802,19 +794,14 @@ export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 
 	hhm->superblock.prefix_end = hhm->off;
 
-	if(!hhm_db_append(hhm, padding, pad4k(hhm->off) - hhm->off)) {
-		hhm->failed = true;
-		return false;
-	}
-
 	/* Create and write out the superblock */
 	memcpy(hhm->superblock.magic, HARDHAT_MAGIC, sizeof hhm->superblock.magic);
 	hhm->superblock.byteorder = UINT64_C(0x0123456789ABCDEF);
-	hhm->superblock.version = UINT32_C(3);
+	hhm->superblock.version = UINT32_C(4);
 	hhm->superblock.entries = num;
 	hhm->superblock.prefixes = pfxnum;
 	hhm->superblock.filesize = hhm->off;
-	hhm->superblock.checksum = calchash_murmur3_fake((const void *)&hhm->superblock, sizeof hhm->superblock - 4, hhm->superblock.hashseed);
+	hhm->superblock.checksum = calchash_murmur3((const void *)&hhm->superblock, sizeof hhm->superblock - 4, hhm->superblock.hashseed);
 
 	if(fseek(db, 0, SEEK_SET) == -1) {
 		hhm_set_error(hhm, "seeking in %s failed: %m", hhm->filename);

@@ -3,20 +3,44 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdarg.h>
 
 #include "src/reader.h"
 #include "src/maker.h"
 
+#define TODO "TODO"
+#define SKIP "SKIP"
+
 static unsigned int testcounter;
 
-static void tap(bool test, const char *description) {
-	testcounter++;
-	printf("%s %u - %s\n", test ? "ok" : "not ok", testcounter, description);
+static bool tap(bool test, const char *modifier, const char *fmt, ...) {
+	va_list ap;
+	printf("%s %u", test ? "ok" : "not ok", ++testcounter);
+	if(fmt) {
+		printf(" - ");
+		va_start(ap, fmt);
+		vprintf(fmt, ap);
+		va_end(ap);
+	}
+	if(modifier)
+		printf(" # %s", modifier);
+	putchar('\n');
+	fflush(stdout);
+	return test;
 }
 
-static void bail(const char *description) {
-	printf("Bailing out! %s\n", description);
-	exit(1);
+static void bail(const char *fmt, ...) {
+	va_list ap;
+	printf("Bailing out!");
+	if(fmt) {
+		printf(" ");
+		va_start(ap, fmt);
+		vprintf(fmt, ap);
+		va_end(ap);
+	}
+	putchar('\n');
+	fflush(stdout);
+	abort();
 }
 
 int main(void) {
@@ -32,11 +56,13 @@ int main(void) {
 
 	sprintf(filename, "%s/test.hh", tmpdir);
 	hhm = hardhat_maker_new(filename);
-	if(!hhm) bail("no hardhat_maker object");
+	if(!tap(hhm, NULL, "create a hardhat_maker"))
+		bail("no hardhat_maker object");
 
-	tap(true, "able to create a hardhat_maker");
+	tap(hardhat_maker_add(hhm, "foo", 3, "data", 4), NULL, "add an entry");
 
-	tap(hardhat_maker_finish(hhm), "close the hardhat_maker # TODO");
+	if(!tap(hardhat_maker_finish(hhm), NULL, "close the hardhat_maker"))
+		printf("# %s\n", hardhat_maker_error(hhm));
 
 	hardhat_maker_free(hhm);
 

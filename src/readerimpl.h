@@ -50,11 +50,21 @@ static bool HHE(hhc_validate)(hardhat_t *hardhat, const struct stat *st) {
 	if((off_t)u64(hardhat->filesize) != st->st_size)
 		return false;
 
-	if(u32(hardhat->version) < UINT32_C(1) || u32(hardhat->version) > UINT32_C(3))
+	if(!u32(hardhat->version)) {
 		return false;
-
-	if(HHE(hhc_calchash)(hardhat, (const void *)hardhat, sizeof *hardhat - 4) != u32(hardhat->checksum))
+	} else if(u32(hardhat->version) <= UINT32_C(3)) {
+		if(st->st_size < (off_t)sizeof(struct oldhardhat))
+			return false;
+		if(HHE(hhc_calchash)(hardhat, (const void *)hardhat, sizeof(struct oldhardhat) - 4)
+				!= u32(((struct oldhardhat *)hardhat)->checksum))
+			return false;
+	} else if(u32(hardhat->version) <= UINT32_C(4)) {
+		if(HHE(hhc_calchash)(hardhat, (const void *)hardhat, sizeof *hardhat - 4)
+				!= u32(hardhat->checksum))
+			return false;
+	} else {
 		return false;
+	}
 
 	if(u64(hardhat->data_start) % sizeof(uint32_t))
 		return false;
