@@ -579,7 +579,7 @@ static int qsort_directory_cmp(const void *a, const void *b) {
 		return 0;
 	}
 
-	/* get the first record again: it may have moved */
+	/* get the first record again: the memory mapping may have moved */
 	ar = hhm_getrec(qsort_data, recs[ad]);
 	if(!ar) {
 		qsort_data = NULL;

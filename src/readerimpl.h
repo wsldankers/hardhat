@@ -244,7 +244,7 @@ static void HHE(hhc_hash_find)(hardhat_cursor_t *c) {
 				return;
 			off = u64(directory[he_data]);
 			reclen = 6;
-			if(off < data_start || off + reclen < off || off + reclen > data_end || off % sizeof(uint32_t))
+			if(off < data_start || off + reclen < off || off + reclen > data_end || off % 4)
 				return;
 			rec = buf + off;
 			keylen = u16read(rec + 4);
@@ -316,7 +316,7 @@ static void HHE(hhc_hash_find)(hardhat_cursor_t *c) {
 			return;
 		off = u64(directory[he_data]);
 		reclen = 6;
-		if(off < data_start || off + reclen < off || off + reclen > data_end || off % sizeof(uint32_t))
+		if(off < data_start || off + reclen < off || off + reclen > data_end || off % 4)
 			return;
 		rec = buf + off;
 		keylen = u16read(rec + 4);
@@ -348,7 +348,7 @@ static void HHE(hhc_hash_find)(hardhat_cursor_t *c) {
 			return;
 		off = u64(directory[he_data]);
 		reclen = 6;
-		if(off < data_start || off + reclen < off || off + reclen > data_end || off % sizeof(uint32_t))
+		if(off < data_start || off + reclen < off || off + reclen > data_end || off % 4)
 			return;
 		rec = buf + off;
 		keylen = u16read(rec + 4);
@@ -397,7 +397,7 @@ static uint32_t HHE(hhc_prefix_find)(hardhat_t *hardhat, const void *str, uint16
 		// returned as the first entry for itself
 		off = u64(directory[0]);
 		reclen = 6;
-		if(off < data_start || off + reclen < off || off + reclen > data_end || off % sizeof(uint32_t))
+		if(off < data_start || off + reclen < off || off + reclen > data_end || off % 4)
 			return CURSOR_NONE;
 		rec = buf + off;
 		keylen = u16read(rec + 4);
@@ -411,7 +411,7 @@ static uint32_t HHE(hhc_prefix_find)(hardhat_t *hardhat, const void *str, uint16
 			// the first is "", so return the next one
 			// check 1
 			off = u64(directory[1]);
-			if(off < data_start || off + reclen < off || off + reclen > data_end || off % sizeof(uint32_t))
+			if(off < data_start || off + reclen < off || off + reclen > data_end || off % 4)
 				return CURSOR_NONE;
 			rec = buf + off;
 			reclen += u16read(rec + 4) + u32read(rec);
@@ -450,7 +450,7 @@ static uint32_t HHE(hhc_prefix_find)(hardhat_t *hardhat, const void *str, uint16
 				return CURSOR_NONE;
 			off = u64(directory[he_data]);
 			reclen = 6;
-			if(off < data_start || off + reclen < off || off + reclen > data_end || off % sizeof(uint32_t))
+			if(off < data_start || off + reclen < off || off + reclen > data_end || off % 4)
 				return CURSOR_NONE;
 			rec = buf + off;
 			keylen = u16read(rec + 4);
@@ -483,7 +483,7 @@ static uint32_t HHE(hhc_prefix_find)(hardhat_t *hardhat, const void *str, uint16
 					/* check if the prefix we found is actually the first one */
 					off = u64(directory[he_data - 1]);
 					reclen = 6;
-					if(off < data_start || off + reclen < off || off + reclen > data_end || off % sizeof(uint32_t))
+					if(off < data_start || off + reclen < off || off + reclen > data_end || off % 4)
 						return CURSOR_NONE;
 					rec = buf + off;
 					keylen = u16read(rec + 4);
@@ -526,7 +526,7 @@ static uint32_t HHE(hhc_prefix_find)(hardhat_t *hardhat, const void *str, uint16
 			return CURSOR_NONE;
         off = u64(directory[he_data]);
         reclen = 6;
-        if(off < data_start || off + reclen < off || off + reclen > data_end || off % sizeof(uint32_t))
+        if(off < data_start || off + reclen < off || off + reclen > data_end || off % 4)
             return CURSOR_NONE;
         rec = buf + off;
         keylen = u16read(rec + 4);
@@ -542,7 +542,7 @@ static uint32_t HHE(hhc_prefix_find)(hardhat_t *hardhat, const void *str, uint16
 			/* check if the prefix we found is actually the first one */
 			off = u64(directory[he_data - 1]);
 			reclen = 6;
-			if(off < data_start || off + reclen < off || off + reclen > data_end || off % sizeof(uint32_t))
+			if(off < data_start || off + reclen < off || off + reclen > data_end || off % 4)
 				return CURSOR_NONE;
 			rec = buf + off;
 			keylen = u16read(rec + 4);
@@ -565,7 +565,7 @@ static uint32_t HHE(hhc_prefix_find)(hardhat_t *hardhat, const void *str, uint16
 			return CURSOR_NONE;
         off = u64(directory[he_data]);
         reclen = 6;
-        if(off < data_start || off + reclen < off || off + reclen > data_end || off % sizeof(uint32_t))
+        if(off < data_start || off + reclen < off || off + reclen > data_end || off % 4)
             return CURSOR_NONE;
         rec = buf + off;
         keylen = u16read(rec + 4);
@@ -581,7 +581,7 @@ static uint32_t HHE(hhc_prefix_find)(hardhat_t *hardhat, const void *str, uint16
 			/* check if the prefix we found is actually the first one */
 			off = u64(directory[he_data - 1]);
 			reclen = 6;
-			if(off < data_start || off + reclen < off || off + reclen > data_end || off % sizeof(uint32_t))
+			if(off < data_start || off + reclen < off || off + reclen > data_end || off % 4)
 				return CURSOR_NONE;
 			rec = buf + off;
 			keylen = u16read(rec + 4);
@@ -620,7 +620,7 @@ static bool HHE(hardhat_fetch)(hardhat_cursor_t *c, bool recursive) {
 			data_end = u64(hardhat->data_end);
 			off = u64(directory[cur]);
 			reclen = 6;
-			if(off < data_start || off + reclen < off || off + reclen > data_end || off % sizeof(uint32_t)) {
+			if(off < data_start || off + reclen < off || off + reclen > data_end || off % 4) {
 				cur = CURSOR_NONE;
 			} else {
 				rec = buf + off;
