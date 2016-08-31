@@ -8,7 +8,7 @@ noinst_PROGRAMS = tests/hardhat
 tests_hardhat_SOURCES = tests/hardhat.c
 tests_hardhat_LDADD = lib/libhardhat.la
 
-LOG_DRIVER = AM_TAP_AWK='$(AWK)' $(top_srcdir)/tests/log-driver
+LOG_DRIVER = AM_TAP_AWK='$(AWK)' top_srcdir=$(top_srcdir) $(top_srcdir)/tests/log-driver
 TESTS = tests/hardhat
 
 lib_LTLIBRARIES = lib/libhardhat.la

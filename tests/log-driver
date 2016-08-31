@@ -7,4 +7,4 @@ trap 'rm -rf -- "$tmp"' EXIT QUIT INT HUP TERM
 
 export TMPDIR=$tmp
 
-sh tap-driver.sh "$@"
+sh $top_srcdir/tap-driver.sh "$@"

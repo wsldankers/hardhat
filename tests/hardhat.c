@@ -4,8 +4,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "reader.h"
-#include "maker.h"
+#include "src/reader.h"
+#include "src/maker.h"
 
 static unsigned int testcounter;
 
