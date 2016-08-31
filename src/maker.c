@@ -231,6 +231,7 @@ static size_t pad4k(size_t x) {
 	return -x % 4096;
 }
 
+__attribute__((unused))
 static size_t adaptive_padding(size_t offset, size_t length, size_t elsize, size_t pagesize) {
 	size_t align = -offset % elsize;
 	offset += align;
