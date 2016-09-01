@@ -34,7 +34,7 @@ typedef const struct hardhat hardhat_t;
    to act as an iterator. See hardhat_cursor() and hardhat_fetch().
    Private values are subject to change without notice. */
 typedef struct hardhat_cursor {
-	/* Pointer to hardhat handle. Private! */
+	/* Pointer to hardhat handle. */
 	hardhat_t *hardhat;
 	/* Pointer to key value, not \0 terminated. */
 	const void *key;
@@ -49,7 +49,7 @@ typedef struct hardhat_cursor {
 	uint16_t keylen;
 	/* Length of the prefix passwd to hardhat_cursor(). Private! */
 	uint16_t prefixlen;
-	/* Whether the first entry has been returned. Private! */
+	/* Whether the first entry has been returned. */
 	bool started;
 	/* Inline buffer containing the prefix. Private!
 	  Extends past the end of the structure. */

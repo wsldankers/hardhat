@@ -1,7 +1,7 @@
 /******************************************************************************
 
 	hardhat - read and write databases optimized for filename-like keys
-	Copyright (c) 2011,2012,2014,2015 Wessel Dankers <wsl@fruit.je>
+	Copyright (c) 2011,2012,2014-2016 Wessel Dankers <wsl@fruit.je>
 
 	This program is free software; you can redistribute it and/or modify
 	it under the terms of the GNU General Public License as published by
@@ -268,6 +268,8 @@ static void HHE(hhc_hash_find)(hardhat_cursor_t *c) {
 				r = memcmp(rec + 6, str, len);
 				if(keylen == len && !r) {
 					datalen = u32read(rec);
+					if(reclen + datalen < reclen)
+						return;
 					reclen += datalen;
 					if(off + reclen < off || off + reclen > data_end)
 						return;
@@ -325,6 +327,8 @@ static void HHE(hhc_hash_find)(hardhat_cursor_t *c) {
 			return;
 		if(keylen == len && !memcmp(rec + 6, str, len)) {
 			datalen = u32read(rec);
+			if(reclen + datalen < reclen)
+				return;
 			reclen += datalen;
 			if(off + reclen < off || off + reclen > data_end)
 				return;
@@ -357,6 +361,8 @@ static void HHE(hhc_hash_find)(hardhat_cursor_t *c) {
 			return;
 		if(keylen == len && !memcmp(rec + 6, str, len)) {
 			datalen = u32read(rec);
+			if(reclen + datalen < reclen)
+				return;
 			reclen += datalen;
 			if(off + reclen < off || off + reclen > data_end)
 				return;
@@ -373,7 +379,7 @@ static void HHE(hhc_hash_find)(hardhat_cursor_t *c) {
 static uint32_t HHE(hhc_prefix_find)(hardhat_t *hardhat, const void *str, uint16_t len) {
 	const struct hashentry *he, *ht;
 	uint64_t off, reclen, data_start, data_end;
-	uint32_t u, hp, hash, he_hash, he_data, hashnum, recnum, upper, lower, upper_hash, lower_hash;
+	uint32_t u, datalen, hp, hash, he_hash, he_data, hashnum, recnum, upper, lower, upper_hash, lower_hash;
 	uint16_t keylen;
 	const uint64_t *directory;
 	const uint8_t *rec, *buf;
@@ -403,7 +409,11 @@ static uint32_t HHE(hhc_prefix_find)(hardhat_t *hardhat, const void *str, uint16
 		keylen = u16read(rec + 4);
 		if(keylen) {
 			// check 0
-			reclen += keylen + u32read(rec);
+			reclen += keylen;
+			datalen = u32read(rec);
+			if(reclen + datalen < reclen)
+				return;
+			reclen += datalen;
 			if(off + reclen < off || off + reclen > data_end)
 				return CURSOR_NONE;
 			return 0;
@@ -414,7 +424,11 @@ static uint32_t HHE(hhc_prefix_find)(hardhat_t *hardhat, const void *str, uint16
 			if(off < data_start || off + reclen < off || off + reclen > data_end || off % 4)
 				return CURSOR_NONE;
 			rec = buf + off;
-			reclen += u16read(rec + 4) + u32read(rec);
+			reclen += u16read(rec + 4);
+			datalen = u32read(rec);
+			if(reclen + datalen < reclen)
+				return;
+			reclen += datalen;
 			if(off + reclen < off || off + reclen > data_end)
 				return CURSOR_NONE;
 			return 1;
@@ -473,7 +487,10 @@ static uint32_t HHE(hhc_prefix_find)(hardhat_t *hardhat, const void *str, uint16
 			} else {
 				r = memcmp(rec + 6, str, len);
 				if(!r) {
-					reclen += u32read(rec);
+					datalen = u32read(rec);
+					if(reclen + datalen < reclen)
+						return CURSOR_NONE;
+					reclen += datalen;
 					if(off + reclen < off || off + reclen > data_end)
 						return CURSOR_NONE;
 
