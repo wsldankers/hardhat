@@ -69,7 +69,8 @@ struct hardhat {
 	uint64_t byteorder;
 	/* Database version */
 	uint32_t version;
-	uint32_t padding;
+	/* Alignment for data values */
+	uint32_t alignment;
 	/* Size of the database file, to detect truncated databases */
 	uint64_t filesize;
 	/* Start and end of the section containing the entries themselves */

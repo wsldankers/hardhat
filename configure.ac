@@ -1,5 +1,4 @@
-# Process this file with autoconf to produce a configure script.
-
+AC_PREREQ(2.59)
 AC_INIT(hardhat, 1.1.5, wsl-hardhat-bugs@fruit.je)
 AM_INIT_AUTOMAKE([foreign subdir-objects dist-xz no-dist-gzip])
 

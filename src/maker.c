@@ -54,6 +54,8 @@ struct hardhat_maker {
 	FILE *db;
 	/* Database file name */
 	char *filename;
+	/* Pagesize for larger alignments */
+	size_t pagesize;
 	/* Buffer used to manipulate key values (normalization, etc) */
 	uint8_t *keybuf;
 	/* Window into the already written data, used to detect duplicates */
@@ -70,13 +72,15 @@ struct hardhat_maker {
 	uint32_t recnum;
 	/* Hashtable of added records, used to detect duplicates */
 	struct hashtable *hashtable;
-	/* If this boolean is set, database creation has failed and
-		cannot be restarted or continued. */
-	bool failed;
-	/* Database is completed and cannot be modified anymore */
-	bool finished;
 	/* Indicates what went wrong in case of failure */
 	char *error;
+	/* If this boolean is set, database creation has failed and
+		cannot be restarted or continued. */
+	bool failed:1;
+	/* Entries have been added, so the alignment is fixed now */
+	bool started:1;
+	/* Database is completed and cannot be modified anymore */
+	bool finished:1;
 	/* The superblock, as it will be created at the end */
 	struct hardhat superblock;
 };
@@ -85,15 +89,16 @@ struct hardhat_maker {
 	error dynamically */
 static char enomem[] = "Out of memory";
 
+#define HARDHAT_DEFAULT_ALIGNMENT ((size_t)8)
+#define HARDHAT_DEFAULT_PAGESIZE ((size_t)4096)
+
 /* struct defaults */
 static const hardhat_maker_t hardhat_maker_0 = {
 	.recbufsize = 65536,
-	.window = MAP_FAILED
+	.pagesize = HARDHAT_DEFAULT_PAGESIZE,
+	.window = MAP_FAILED,
+	.superblock = { .alignment = HARDHAT_DEFAULT_ALIGNMENT },
 };
-
-#define HARDHAT_PAGESIZE ((size_t)4096)
-/* source buffer for padding */
-static const char padding[HARDHAT_PAGESIZE];
 
 /* Return the error (if any) or an empty string (but never NULL) */
 export const char *hardhat_maker_error(hardhat_maker_t *hhm) {
@@ -353,6 +358,34 @@ export hardhat_maker_t *hardhat_maker_new(const char *filename) {
 	return hhm;
 }
 
+export bool hardhat_maker_set_alignment(hardhat_maker_t *hhm, size_t dataalign, size_t pagesize) {
+	if(hhm->started)
+		return hhm_set_error(hhm, "can't change alignment after output has started"), false;
+
+	if(dataalign) {
+		if(dataalign > HARDHAT_DEFAULT_PAGESIZE)
+			return hhm_set_error(hhm, "data alignment must %zu or smaller", HARDHAT_DEFAULT_PAGESIZE), false;
+		if(dataalign & (dataalign - 1))
+			return hhm_set_error(hhm, "data alignment must be a power of 2"), false;
+	} else {
+		dataalign = HARDHAT_DEFAULT_ALIGNMENT;
+	}
+
+	if(pagesize) {
+		if(pagesize > (1 << 21))
+			return hhm_set_error(hhm, "page size must 2^21 or smaller"), false;
+		if(pagesize & (pagesize - 1))
+			return hhm_set_error(hhm, "page size must be a power of 2"), false;
+	} else {
+		pagesize = HARDHAT_DEFAULT_PAGESIZE;
+	}
+
+	hhm->superblock.alignment = dataalign;
+	hhm->pagesize = pagesize;
+
+	return true;
+}
+
 /* Write bytes to the database and handle any errors */
 static bool hhm_db_write(hardhat_maker_t *hhm, const void *buf, size_t len) {
 	if(!len)
@@ -376,20 +409,29 @@ static bool hhm_db_append(hardhat_maker_t *hhm, const void *buf, size_t len) {
 }
 
 static bool hhm_db_pad(hardhat_maker_t *hhm, size_t length, size_t elsize) {
-	size_t offset, align, start, end;
+	size_t pagesize, offset, align, start, end;
 
+	pagesize = hhm->pagesize;
 	offset = hhm->off;
 
 	align = -offset % elsize;
 	offset += align;
 
-	start = offset % HARDHAT_PAGESIZE;
-	end = HARDHAT_PAGESIZE - -(offset + length) % HARDHAT_PAGESIZE;
+	start = offset % pagesize;
+	end = pagesize - -(offset + length) % pagesize;
 
 	if(start > end)
-		align += -offset % HARDHAT_PAGESIZE;
+		align += -offset % pagesize;
 
-	return hhm_db_append(hhm, padding, align);
+	if(fseek(hhm->db, align, SEEK_CUR) == -1) {
+		hhm_set_error(hhm, "seeking %zu bytes in %s failed: %m", align, hhm->filename);
+		hhm->failed = true;
+		return false;
+	}
+
+	hhm->off += align;
+
+	return true;
 }
 
 /* Fetch already written bytes from the database by maintaining a mmap()ed
@@ -476,11 +518,15 @@ export bool hardhat_maker_add(hardhat_maker_t *hhm, const void *key, uint16_t ke
 			hp = 0;
 	}
 
-	recsize = (size_t)6 + (size_t)keylen + (size_t)datalen;
+	hhm->started = true;
+
+	recsize = (size_t)6 + (size_t)keylen;
 
 	/* Write out the entry to disk */
 	if(!hhm_db_pad(hhm, recsize, 4))
 		return false;
+
+	recsize += (size_t)datalen;
 
 	off = hhm->off;
 
@@ -491,6 +537,9 @@ export bool hardhat_maker_add(hardhat_maker_t *hhm, const void *key, uint16_t ke
 		return false;
 
 	if(!hhm_db_append(hhm, key, keylen))
+		return false;
+
+	if(!hhm_db_pad(hhm, datalen, hhm->superblock.alignment))
 		return false;
 
 	if(!hhm_db_append(hhm, data, datalen))

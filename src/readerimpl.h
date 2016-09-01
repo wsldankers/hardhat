@@ -399,7 +399,7 @@ static uint32_t HHE(hhc_prefix_find)(hardhat_t *hardhat, const void *str, uint16
 	data_end = u64(hardhat->data_end);
 
 	if(!len) {
-		// special treatment for '' to prevent it from being
+		// special treatment for "" to prevent it from being
 		// returned as the first entry for itself
 		off = u64(directory[0]);
 		reclen = 6;
@@ -412,7 +412,7 @@ static uint32_t HHE(hhc_prefix_find)(hardhat_t *hardhat, const void *str, uint16
 			reclen += keylen;
 			datalen = u32read(rec);
 			if(reclen + datalen < reclen)
-				return;
+				return CURSOR_NONE;
 			reclen += datalen;
 			if(off + reclen < off || off + reclen > data_end)
 				return CURSOR_NONE;
@@ -427,7 +427,7 @@ static uint32_t HHE(hhc_prefix_find)(hardhat_t *hardhat, const void *str, uint16
 			reclen += u16read(rec + 4);
 			datalen = u32read(rec);
 			if(reclen + datalen < reclen)
-				return;
+				return CURSOR_NONE;
 			reclen += datalen;
 			if(off + reclen < off || off + reclen > data_end)
 				return CURSOR_NONE;
