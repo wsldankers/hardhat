@@ -52,13 +52,15 @@ static bool HHE(hhc_validate)(hardhat_t *hardhat, const struct stat *st) {
 
 	if(!u32(hardhat->version)) {
 		return false;
-	} else if(u32(hardhat->version) <= UINT32_C(3)) {
+	} else if(u32(hardhat->version) <= UINT32_C(2)) {
 		if(st->st_size < (off_t)sizeof(struct oldhardhat))
 			return false;
 		if(HHE(hhc_calchash)(hardhat, (const void *)hardhat, sizeof(struct oldhardhat) - 4)
 				!= u32(((struct oldhardhat *)hardhat)->checksum))
 			return false;
-	} else if(u32(hardhat->version) <= UINT32_C(4)) {
+		if(hardhat->alignment)
+			return false;
+	} else if(u32(hardhat->version) <= UINT32_C(3)) {
 		if(HHE(hhc_calchash)(hardhat, (const void *)hardhat, sizeof *hardhat - 4)
 				!= u32(hardhat->checksum))
 			return false;
@@ -192,17 +194,80 @@ static void HHE(hardhat_debug_dump)(hardhat_t *hardhat) {
 		fwrite(rec + 6, 1, u16read(rec + 4), stdout);
 		puts("'");
 	}
+}
 
+/*
+**	Try to fetch a single entry into the (dummy) cursor object, taking
+**	extreme care to guard against integer overflow/wrap and pointers outside
+**	the memory mapped region.
+**
+**	Usage: fill in the cursor hardhat and cur fields. This function will
+**	either return false (if an anomaly was detected) or fill in the key,
+**	keylen, data and datalen fields and return true.
+*/
+static inline bool HHE(hhc_fetch_entry)(hardhat_cursor_t *c) {
+	uint16_t keylen;
+	uint32_t recnum, index;
+	uint64_t off, reclen, data_start, data_end, datalen, datapad;
+	const uint8_t *rec, *buf;
+	const struct hardhat *hardhat;
+	const uint64_t *directory;
+
+	index = c->cur;
+	hardhat = c->hardhat;
+	recnum = u32(hardhat->entries);
+	if(index >= recnum)
+		return false;
+
+	buf = (const uint8_t *)hardhat;
+	directory = (const uint64_t *)(buf + u64(hardhat->directory_start));
+	off = u64(directory[index]);
+	reclen = 6;
+    data_start = u64(hardhat->data_start);
+    data_end = u64(hardhat->data_end);
+	if(off < data_start || off + reclen < off || off + reclen > data_end || off % 4)
+		return false;
+
+	buf = (const uint8_t *)hardhat;
+	rec = buf + off;
+	keylen = u16read(rec + 4);
+	reclen += keylen;
+	if(off + reclen < off || off + reclen > data_end)
+		return false;
+
+	datalen = u32read(rec);
+	if(reclen + datalen < reclen)
+		return false;
+
+	reclen += datalen;
+	if(off + reclen < off || off + reclen > data_end)
+		return false;
+
+	if(u32(hardhat->version) >= UINT32_C(3)) {
+		datapad = -(off + reclen) % ((uint64_t)u32(hardhat->alignment) + UINT64_C(1));
+		if(reclen + datapad < reclen)
+			return false;
+
+		reclen += datapad;
+		if(off + reclen < off || off + reclen > data_end)
+			return false;
+	}
+
+	c->key = rec + 6;
+	c->keylen = keylen;
+	c->data = rec + 6 + keylen + datapad;
+	c->datalen = datalen;
+
+	return true;
 }
 
 static void HHE(hhc_hash_find)(hardhat_cursor_t *c) {
 	const struct hashentry *he, *ht;
 	const struct hardhat *hardhat;
-	uint64_t off, reclen, data_start, data_end;
-	uint32_t u, hp, hash, he_hash, he_data, datalen, recnum, upper, lower, upper_hash, lower_hash;
-	uint16_t len, keylen;
-	const uint64_t *directory;
-	const uint8_t *rec, *buf;
+	hardhat_cursor_t lookup;
+	uint32_t u, hp, hash, he_hash, recnum, upper, lower, upper_hash, lower_hash;
+	uint16_t len;
+	const uint8_t *buf;
 	const void *str;
 	unsigned int tries = 0;
 	int r;
@@ -211,17 +276,14 @@ static void HHE(hhc_hash_find)(hardhat_cursor_t *c) {
 	recnum = u32(hardhat->entries);
 	if(!recnum)
 		return;
+	lookup.hardhat = hardhat;
 
 	str = c->prefix;
 	len = c->prefixlen;
 	hash = HHE(hhc_calchash)(hardhat, str, len);
-	buf = (const uint8_t *)c->hardhat;
+	buf = (const uint8_t *)hardhat;
 
 	ht = (const struct hashentry *)(buf + u64(hardhat->hash_start));
-	directory = (const uint64_t *)(buf + u64(hardhat->directory_start));
-
-	data_start = u64(hardhat->data_start);
-	data_end = u64(hardhat->data_end);
 
 	lower = 0;
 	upper = recnum;
@@ -239,21 +301,12 @@ static void HHE(hhc_hash_find)(hardhat_cursor_t *c) {
 		if(he_hash == hash) {
 			if(u32(hardhat->version) < 3)
 				break;
-			he_data = u32(he->data);
-			if(he_data >= recnum)
+			lookup.cur = u32(he->data);
+			if(!HHE(hhc_fetch_entry)(&lookup))
 				return;
-			off = u64(directory[he_data]);
-			reclen = 6;
-			if(off < data_start || off + reclen < off || off + reclen > data_end || off % 4)
-				return;
-			rec = buf + off;
-			keylen = u16read(rec + 4);
-			reclen += keylen;
-			if(off + reclen < off || off + reclen > data_end)
-				return;
-			if(keylen < len) {
+			if(lookup.keylen < len) {
 				/* found key is shorter than the reference key */
-				r = memcmp(rec + 6, str, keylen);
+				r = memcmp(lookup.key, str, lookup.keylen);
 				if(r > 0) {
 					/* found key is shorter but lexicographically bigger */
 					upper = hp;
@@ -265,19 +318,13 @@ static void HHE(hhc_hash_find)(hardhat_cursor_t *c) {
 					lower_hash = he_hash;
 				}
 			} else {
-				r = memcmp(rec + 6, str, len);
-				if(keylen == len && !r) {
-					datalen = u32read(rec);
-					if(reclen + datalen < reclen)
-						return;
-					reclen += datalen;
-					if(off + reclen < off || off + reclen > data_end)
-						return;
-					c->cur = he_data;
-					c->key = rec + 6;
-					c->keylen = keylen;
-					c->data = rec + 6 + keylen;
-					c->datalen = datalen;
+				r = memcmp(lookup.key, str, len);
+				if(lookup.keylen == len && !r) {
+					c->cur = lookup.cur;
+					c->key = lookup.key;
+					c->keylen = lookup.keylen;
+					c->data = lookup.data;
+					c->datalen = lookup.datalen;
 					return;
 				}
 				if(r < 0) {
@@ -313,30 +360,17 @@ static void HHE(hhc_hash_find)(hardhat_cursor_t *c) {
 		he_hash = u32(he->hash);
 		if(he_hash != hash)
 			break;
-		he_data = u32(he->data);
-		if(he_data >= recnum)
+
+		lookup.cur = u32(he->data);
+		if(!HHE(hhc_fetch_entry)(&lookup))
 			return;
-		off = u64(directory[he_data]);
-		reclen = 6;
-		if(off < data_start || off + reclen < off || off + reclen > data_end || off % 4)
-			return;
-		rec = buf + off;
-		keylen = u16read(rec + 4);
-		reclen += keylen;
-		if(off + reclen < off || off + reclen > data_end)
-			return;
-		if(keylen == len && !memcmp(rec + 6, str, len)) {
-			datalen = u32read(rec);
-			if(reclen + datalen < reclen)
-				return;
-			reclen += datalen;
-			if(off + reclen < off || off + reclen > data_end)
-				return;
-			c->cur = he_data;
-			c->key = rec + 6;
-			c->keylen = keylen;
-			c->data = rec + 6 + keylen;
-			c->datalen = datalen;
+
+		if(lookup.keylen == len && !memcmp(lookup.key, str, len)) {
+			c->cur = lookup.cur;
+			c->key = lookup.key;
+			c->keylen = lookup.keylen;
+			c->data = lookup.data;
+			c->datalen = lookup.datalen;
 			return;
 		}
 	}
@@ -347,42 +381,27 @@ static void HHE(hhc_hash_find)(hardhat_cursor_t *c) {
 		he_hash = u32(he->hash);
 		if(he_hash != hash)
 			break;
-		he_data = u32(he->data);
-		if(he_data >= recnum)
+
+		lookup.cur = u32(he->data);
+		if(!HHE(hhc_fetch_entry)(&lookup))
 			return;
-		off = u64(directory[he_data]);
-		reclen = 6;
-		if(off < data_start || off + reclen < off || off + reclen > data_end || off % 4)
-			return;
-		rec = buf + off;
-		keylen = u16read(rec + 4);
-		reclen += keylen;
-		if(off + reclen < off || off + reclen > data_end)
-			return;
-		if(keylen == len && !memcmp(rec + 6, str, len)) {
-			datalen = u32read(rec);
-			if(reclen + datalen < reclen)
-				return;
-			reclen += datalen;
-			if(off + reclen < off || off + reclen > data_end)
-				return;
-			c->cur = he_data;
-			c->key = rec + 6;
-			c->keylen = keylen;
-			c->data = rec + 6 + keylen;
-			c->datalen = datalen;
+
+		if(lookup.keylen == len && !memcmp(lookup.key, str, len)) {
+			c->cur = lookup.cur;
+			c->key = lookup.key;
+			c->keylen = lookup.keylen;
+			c->data = lookup.data;
+			c->datalen = lookup.datalen;
 			return;
 		}
 	}
 }
 
 static uint32_t HHE(hhc_prefix_find)(hardhat_t *hardhat, const void *str, uint16_t len) {
+	hardhat_cursor_t lookup;
 	const struct hashentry *he, *ht;
-	uint64_t off, reclen, data_start, data_end;
-	uint32_t u, datalen, hp, hash, he_hash, he_data, hashnum, recnum, upper, lower, upper_hash, lower_hash;
-	uint16_t keylen;
-	const uint64_t *directory;
-	const uint8_t *rec, *buf;
+	uint32_t u, hp, hash, he_hash, he_data, hashnum, recnum, upper, lower, upper_hash, lower_hash;
+	const uint8_t *buf;
 	int r;
 	unsigned int tries = 0;
 
@@ -392,44 +411,22 @@ static uint32_t HHE(hhc_prefix_find)(hardhat_t *hardhat, const void *str, uint16
 	if(!recnum)
 		return CURSOR_NONE;
 
-	buf = (const uint8_t *)hardhat;
-	directory = (const uint64_t *)(buf + u64(hardhat->directory_start));
-
-	data_start = u64(hardhat->data_start);
-	data_end = u64(hardhat->data_end);
+	lookup.hardhat = hardhat;
 
 	if(!len) {
 		// special treatment for "" to prevent it from being
 		// returned as the first entry for itself
-		off = u64(directory[0]);
-		reclen = 6;
-		if(off < data_start || off + reclen < off || off + reclen > data_end || off % 4)
+		lookup.cur = 0;
+		if(!HHE(hhc_fetch_entry)(&lookup))
 			return CURSOR_NONE;
-		rec = buf + off;
-		keylen = u16read(rec + 4);
-		if(keylen) {
-			// check 0
-			reclen += keylen;
-			datalen = u32read(rec);
-			if(reclen + datalen < reclen)
-				return CURSOR_NONE;
-			reclen += datalen;
-			if(off + reclen < off || off + reclen > data_end)
-				return CURSOR_NONE;
+		if(lookup.keylen) {
+			// ok this is not actually "" itself, so we can return it
 			return 0;
 		} else if(recnum > 1) {
 			// the first is "", so return the next one
 			// check 1
-			off = u64(directory[1]);
-			if(off < data_start || off + reclen < off || off + reclen > data_end || off % 4)
-				return CURSOR_NONE;
-			rec = buf + off;
-			reclen += u16read(rec + 4);
-			datalen = u32read(rec);
-			if(reclen + datalen < reclen)
-				return CURSOR_NONE;
-			reclen += datalen;
-			if(off + reclen < off || off + reclen > data_end)
+			lookup.cur = 1;
+			if(!HHE(hhc_fetch_entry)(&lookup))
 				return CURSOR_NONE;
 			return 1;
 		} else {
@@ -441,6 +438,7 @@ static uint32_t HHE(hhc_prefix_find)(hardhat_t *hardhat, const void *str, uint16
 		return CURSOR_NONE;
 
 	hash = HHE(hhc_calchash)(hardhat, str, len);
+	buf = (const uint8_t *)hardhat;
 	ht = (const struct hashentry *)(buf + u64(hardhat->prefix_start));
 
 	lower = 0;
@@ -459,21 +457,13 @@ static uint32_t HHE(hhc_prefix_find)(hardhat_t *hardhat, const void *str, uint16
 		if(he_hash == hash) {
 			if(u32(hardhat->version) < 3)
 				break;
+			lookup.cur = u32(he->data);
 			he_data = u32(he->data);
-			if(he_data >= recnum)
+			if(!HHE(hhc_fetch_entry)(&lookup))
 				return CURSOR_NONE;
-			off = u64(directory[he_data]);
-			reclen = 6;
-			if(off < data_start || off + reclen < off || off + reclen > data_end || off % 4)
-				return CURSOR_NONE;
-			rec = buf + off;
-			keylen = u16read(rec + 4);
-			reclen += keylen;
-			if(off + reclen < off || off + reclen > data_end)
-				return CURSOR_NONE;
-			if(keylen < len) {
+			if(lookup.keylen < len) {
 				/* found key is shorter than the reference key */
-				r = memcmp(rec + 6, str, keylen);
+				r = memcmp(lookup.key, str, lookup.keylen);
 				if(r > 0) {
 					/* found key is shorter but lexicographically bigger */
 					upper = hp;
@@ -485,30 +475,17 @@ static uint32_t HHE(hhc_prefix_find)(hardhat_t *hardhat, const void *str, uint16
 					lower_hash = he_hash;
 				}
 			} else {
-				r = memcmp(rec + 6, str, len);
+				r = memcmp(lookup.key, str, len);
 				if(!r) {
-					datalen = u32read(rec);
-					if(reclen + datalen < reclen)
-						return CURSOR_NONE;
-					reclen += datalen;
-					if(off + reclen < off || off + reclen > data_end)
-						return CURSOR_NONE;
-
-					if(!he_data)
-						return he_data;
-
 					/* check if the prefix we found is actually the first one */
-					off = u64(directory[he_data - 1]);
-					reclen = 6;
-					if(off < data_start || off + reclen < off || off + reclen > data_end || off % 4)
+					if(!lookup.cur)
+						return 0;
+
+					lookup.cur--;
+					if(!HHE(hhc_fetch_entry)(&lookup))
 						return CURSOR_NONE;
-					rec = buf + off;
-					keylen = u16read(rec + 4);
-					reclen += keylen;
-					if(off + reclen < off || off + reclen > data_end)
-						return CURSOR_NONE;
-					if(keylen < len || memcmp(rec + 6, str, len))
-						return he_data;
+					if(lookup.keylen < len || memcmp(lookup.key, str, len))
+						return lookup.cur + 1;
 					/* bummer, it isn't the first one. proceed as usual */
 				}
 				if(r < 0) {
@@ -538,35 +515,15 @@ static uint32_t HHE(hhc_prefix_find)(hardhat_t *hardhat, const void *str, uint16
 		he_hash = u32(he->hash);
 		if(he_hash != hash)
 			break;
-		he_data = u32(he->data);
-		if(he_data >= recnum)
+		lookup.cur = u32(he->data);
+		if(!HHE(hhc_fetch_entry)(&lookup))
 			return CURSOR_NONE;
-        off = u64(directory[he_data]);
-        reclen = 6;
-        if(off < data_start || off + reclen < off || off + reclen > data_end || off % 4)
-            return CURSOR_NONE;
-        rec = buf + off;
-        keylen = u16read(rec + 4);
-        reclen += keylen;
-		if(off + reclen < off || off + reclen > data_end)
-            return CURSOR_NONE;
-		if(keylen < len || memcmp(rec + 6, str, len))
-			continue;
-		reclen += u32read(rec);
-		if(off + reclen < off || off + reclen > data_end)
-			return CURSOR_NONE;
-		if(he_data) {
+		if(lookup.cur) {
 			/* check if the prefix we found is actually the first one */
-			off = u64(directory[he_data - 1]);
-			reclen = 6;
-			if(off < data_start || off + reclen < off || off + reclen > data_end || off % 4)
+			lookup.cur--;
+			if(!HHE(hhc_fetch_entry)(&lookup))
 				return CURSOR_NONE;
-			rec = buf + off;
-			keylen = u16read(rec + 4);
-			reclen += keylen;
-			if(off + reclen < off || off + reclen > data_end)
-				return CURSOR_NONE;
-			if(keylen >= len && !memcmp(rec + 6, str, len))
+			if(lookup.keylen >= len && !memcmp(lookup.key, str, len))
 				continue;
 		}
 		return he_data;
@@ -577,35 +534,15 @@ static uint32_t HHE(hhc_prefix_find)(hardhat_t *hardhat, const void *str, uint16
 		he_hash = u32(he->hash);
 		if(he_hash != hash)
 			break;
-		he_data = u32(he->data);
-		if(he_data >= recnum)
+		lookup.cur = u32(he->data);
+		if(!HHE(hhc_fetch_entry)(&lookup))
 			return CURSOR_NONE;
-        off = u64(directory[he_data]);
-        reclen = 6;
-        if(off < data_start || off + reclen < off || off + reclen > data_end || off % 4)
-            return CURSOR_NONE;
-        rec = buf + off;
-        keylen = u16read(rec + 4);
-        reclen += keylen;
-		if(off + reclen < off || off + reclen > data_end)
-            return CURSOR_NONE;
-		if(keylen < len || memcmp(rec + 6, str, len))
-			continue;
-		reclen += u32read(rec);
-		if(off + reclen < off || off + reclen > data_end)
-			return CURSOR_NONE;
-		if(he_data) {
+		if(lookup.cur) {
 			/* check if the prefix we found is actually the first one */
-			off = u64(directory[he_data - 1]);
-			reclen = 6;
-			if(off < data_start || off + reclen < off || off + reclen > data_end || off % 4)
+			lookup.cur--;
+			if(!HHE(hhc_fetch_entry)(&lookup))
 				return CURSOR_NONE;
-			rec = buf + off;
-			keylen = u16read(rec + 4);
-			reclen += keylen;
-			if(off + reclen < off || off + reclen > data_end)
-				return CURSOR_NONE;
-			if(keylen >= len && !memcmp(rec + 6, str, len))
+			if(lookup.keylen >= len && !memcmp(lookup.key, str, len))
 				continue;
 		}
 		return he_data;
@@ -668,10 +605,6 @@ static bool HHE(hardhat_fetch)(hardhat_cursor_t *c, bool recursive) {
 		return c->started = false;
 	}
 
-	rec = buf + u64(directory[cur]);
-	c->key = rec + 6;
-	c->keylen = u16read(rec + 4);
-	c->data = rec + 6 + c->keylen;
-	c->datalen = u32read(rec);
+	HHE(hhc_fetch_entry)(c);
 	return c->started = true;
 }

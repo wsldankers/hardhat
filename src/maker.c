@@ -371,6 +371,9 @@ export hardhat_maker_t *hardhat_maker_new(const char *filename) {
 }
 
 export bool hardhat_maker_set_alignment(hardhat_maker_t *hhm, size_t dataalign, size_t pagesize) {
+	if(!hhm || hhm->failed)
+		return false;
+
 	if(hhm->started)
 		return hhm_set_error(hhm, "can't change alignment after output has started"), false;
 
@@ -392,7 +395,7 @@ export bool hardhat_maker_set_alignment(hardhat_maker_t *hhm, size_t dataalign, 
 		pagesize = HARDHAT_DEFAULT_PAGESIZE;
 	}
 
-	hhm->superblock.alignment = dataalign;
+	hhm->superblock.alignment = dataalign - UINT32_C(1);
 	hhm->pagesize = pagesize;
 
 	return true;
@@ -551,7 +554,7 @@ export bool hardhat_maker_add(hardhat_maker_t *hhm, const void *key, uint16_t ke
 	if(!hhm_db_append(hhm, key, keylen))
 		return false;
 
-	if(!hhm_db_pad(hhm, datalen, hhm->superblock.alignment))
+	if(!hhm_db_pad(hhm, 1, (uint64_t)hhm->superblock.alignment + UINT64_C(1)))
 		return false;
 
 	if(!hhm_db_append(hhm, data, datalen))
@@ -858,7 +861,7 @@ export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 	/* Create and write out the superblock */
 	memcpy(hhm->superblock.magic, HARDHAT_MAGIC, sizeof hhm->superblock.magic);
 	hhm->superblock.byteorder = UINT64_C(0x0123456789ABCDEF);
-	hhm->superblock.version = UINT32_C(4);
+	hhm->superblock.version = UINT32_C(3);
 	hhm->superblock.entries = num;
 	hhm->superblock.prefixes = pfxnum;
 	hhm->superblock.filesize = hhm->off;
