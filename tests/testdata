@@ -1,0 +1,26 @@
+#! /bin/sh
+
+set -e
+
+case $TMPDIR in '')
+	echo "no \$TMPDIR" >&2
+	exit 2
+esac
+
+base64 -d <<'EOT' | gunzip >"$TMPDIR/testdata-2-be.hh"
+H4sIALS8sVMCA+3ZMUvDQBjG8WujpipoEHGKUsjmYmenRlvJUhBxdNAgDU6BStWh4CaIuDuLKOgm
+IkXwI7iJkyB+gk7u3nFvj+LoIEX+v+XhfXMXwmW6u8Uk3qgl8WYhqmendy89pVRROeuSQT8fbFak
+riQ2y1KXpa5KXTUTx807L2du2goAAAAAAPy5w+ysM1BOKC/daa040mvmeezYnr+711rSY2vOQF+P
+X3Vsf9L099upmbPm/Him59Ud+0Weftb/Ol/G8dsAAAAAAPgld79fkryQDCXlwj+Q+/3gSnJbssMa
+AgAAAAAwvKbjk3eTYfp5r8Nbvn3LdI7mfsOcAZQOuq+zOv2j+V5DZ+E8mTrWOfJ4/fWhc+x5a8Gc
+ERRZSQAAAAAAhlfYjCKzn4+f5rpmn8+KAAAAAADw/3wD/SKyVgBQAAA=
+EOT
+
+base64 -d <<'EOT' | gunzip >"$TMPDIR/testdata-2-le.hh"
+H4sIAP7CsVMCA+3aMUvDQBiA4aupTW1AioOLxYodlC52LJ2MtpJJRFwcBC2iiGCkKoj4B1xd1ElB
+B1Hc/BsdxEkQXF2KIE5Ofkm/HuLmIkXeB8LbXO5KuEylKQb+fDXwF96at0frtUKix6g5bbade60p
+tRNozYiea82kLtP2yRF95+jH7pABAAAAAAB/bracWep8zsjhmPpKY8rSsbUw9K14zDWrG40JmVu1
+vo3L/GkrHvfi8Z29erRmxvpxTdbVrPienOia3p/bmcdjAwAAAADg9/R//bT2VJvTlrSB9kq7rD3M
+soUAAAAAAHS7XPO82CsdLl8vJqWD495+SnqS2jpISI/H8heO9P3m8S4t3X7+fHKlrYHKa/Re/8tl
+f4tdBAAAAACgu216YT76PV+oPJwl2Q4AAAAAAP6lL4SLWIYAUAAA
+EOT

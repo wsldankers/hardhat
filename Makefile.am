@@ -8,8 +8,8 @@ noinst_PROGRAMS = tests/hardhat
 tests_hardhat_SOURCES = tests/hardhat.c
 tests_hardhat_LDADD = lib/libhardhat.la
 
-LOG_DRIVER = AM_TAP_AWK='$(AWK)' top_srcdir=$(top_srcdir) $(top_srcdir)/tests/log-driver
-TESTS = tests/hardhat
+LOG_DRIVER = AM_TAP_AWK='$(AWK)' $(top_srcdir)/tap-driver.sh
+TESTS = tests/wrapper
 
 lib_LTLIBRARIES = lib/libhardhat.la
 lib_libhardhat_la_SOURCES = src/hashtable.c src/hashtable.h src/layout.h src/maker.c src/maker.h src/reader.c src/reader.h src/murmur3.c src/murmur3.h src/readerimpl.h
