@@ -1,7 +1,7 @@
 /******************************************************************************
 
 	hardhat - read and write databases optimized for filename-like keys
-	Copyright (c) 2011,2012 Wessel Dankers <wsl@fruit.je>
+	Copyright (c) 2011-2014 Wessel Dankers <wsl@fruit.je>
 
 	This program is free software; you can redistribute it and/or modify
 	it under the terms of the GNU General Public License as published by
@@ -18,8 +18,8 @@
 
 ******************************************************************************/
 
-#ifndef _HARDHAT_HASHTABLE_H
-#define _HARDHAT_HASHTABLE_H
+#ifndef HARDHAT_HASHTABLE_H
+#define HARDHAT_HASHTABLE_H
 
 #include <stdint.h>
 
