@@ -34,7 +34,7 @@ AC_CHECK_LIB(rt, clock_gettime, [true], [
 	exit 1
 ])
 
-AC_CHECK_FUNCS([fpurge __fpurge fileno], [break])
+AC_CHECK_FUNCS([fpurge __fpurge], [break])
 AC_CHECK_HEADERS([stdio_ext.h])
 
 MY_GCC_BUILTIN(bswap16, 0)

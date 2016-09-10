@@ -100,6 +100,10 @@ static const hardhat_maker_t hardhat_maker_0 = {
 	.superblock = { .alignment = HARDHAT_DEFAULT_ALIGNMENT },
 };
 
+#ifndef O_LARGEFILE
+#define O_LARGEFILE 0
+#endif
+
 /* Return the error (if any) or an empty string (but never NULL) */
 export const char *hardhat_maker_error(hardhat_maker_t *hhm) {
 	return hhm
@@ -291,7 +295,7 @@ static uint32_t makeseed(void) {
 	Returns NULL on failure, with errno set to the problem. */
 export hardhat_maker_t *hardhat_maker_new(const char *filename) {
 	hardhat_maker_t *hhm;
-	int err;
+	int err, fd;
 
 	if(!filename) {
 		errno = EINVAL;
@@ -322,9 +326,18 @@ export hardhat_maker_t *hardhat_maker_new(const char *filename) {
 		return NULL;
 	}
 
-	hhm->db = fopen(filename, "w+");
+	fd = open(filename, O_RDWR|O_CREAT|O_LARGEFILE|O_NOCTTY, 0666);
+	if(fd == -1) {
+		err = errno;
+		hardhat_maker_free(hhm);
+		errno = err;
+		return NULL;
+	}
+
+	hhm->db = fdopen(fd, "r+");
 	if(!hhm->db) {
 		err = errno;
+		close(fd);
 		hardhat_maker_free(hhm);
 		errno = err;
 		return NULL;

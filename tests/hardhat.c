@@ -40,7 +40,7 @@ static void bail(const char *fmt, ...) {
 	}
 	putchar('\n');
 	fflush(stdout);
-	abort();
+	exit(1);
 }
 
 int main(void) {
@@ -57,7 +57,7 @@ int main(void) {
 	sprintf(filename, "%s/test.hh", tmpdir);
 	hhm = hardhat_maker_new(filename);
 	if(!tap(hhm, NULL, "create a hardhat_maker"))
-		bail("no hardhat_maker object");
+		bail("no hardhat_maker object: %m");
 
 	tap(hardhat_maker_add(hhm, "foo", 3, "data", 4), NULL, "add an entry");
 
