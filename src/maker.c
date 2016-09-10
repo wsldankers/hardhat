@@ -379,16 +379,12 @@ export bool hardhat_maker_set_alignment(hardhat_maker_t *hhm, size_t alignment, 
 		if(alignment & (alignment - 1))
 			return hhm_set_error(hhm, "data alignment must be a power of 2"), false;
 		hhm->superblock.alignment = ffs(alignment) - 1;
-	} else {
-		hhm->superblock.alignment = HARDHAT_DEFAULT_ALIGNMENT;
 	}
 
 	if(blocksize) {
 		if(blocksize & (blocksize - 1))
 			return hhm_set_error(hhm, "block size must be a power of 2"), false;
 		hhm->superblock.blocksize = ffs(blocksize) - 1;
-	} else {
-		hhm->superblock.blocksize = HARDHAT_DEFAULT_BLOCKSIZE;
 	}
 
 	return true;

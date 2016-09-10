@@ -42,10 +42,15 @@ extern bool hardhat_maker_fatal(hardhat_maker_t *hhm);
    Returns NULL (and sets errno) on error. */
 extern hardhat_maker_t *hardhat_maker_new(const char *filename);
 
-/* Configure the alignment to use for this database. Must be powers of 2.
-   Supply a value of 0 to revert to the defaults. Supply a value 1 to
-   disable alignment. */
+/* Configure the alignment to use for this database.
+   The first value determines how stored values are aligned.
+   The second value determines page boundaries to avoid when
+   writing out keys and indexes.
+   Must be powers of 2.
+   Supply a value of 0 to leave a value unchanged.
+   Supply a value 1 to disable alignment. */
 extern bool hardhat_maker_set_alignment(hardhat_maker_t *hhm, size_t alignment, size_t blocksize);
+#define HAVE_HARDHAT_MAKER_SET_ALIGNMENT
 
 /* Add an entry. Will silently ignore attempts to add duplicate keys
    (and even return true). Returns false on error. */
