@@ -42,20 +42,25 @@
 
 /******************************************************************************
 
-	Module to create a hardhat table. Uses an unholy combination of
-	buffered I/O and low-level mmap() to get the job done. Caveat developer.
+	Module to create a hardhat database.
 
 ******************************************************************************/
 
 #define export __attribute__((visibility("default")))
 
+#define OUTBUFSIZE ((size_t)65536)
+
 struct hardhat_maker {
 	/* Output file handle */
-	FILE *db;
+	int fd;
 	/* Database file name */
 	char *filename;
 	/* Buffer used to manipulate key values (normalization, etc) */
 	uint8_t *keybuf;
+	/* Output buffer */
+	uint8_t *outbuf;
+	/* Output buffer usage */
+	size_t outbuflen;
 	/* Window into the already written data, used to detect duplicates */
 	uint8_t *window;
 	/* Size of window */
@@ -92,6 +97,7 @@ static char enomem[] = "Out of memory";
 
 /* struct defaults */
 static const hardhat_maker_t hardhat_maker_0 = {
+	.fd = -1,
 	.recbufsize = 65536,
 	.window = MAP_FAILED,
 };
@@ -232,11 +238,13 @@ export int hardhat_cmp(const void *a, size_t al, const void *b, size_t bl) {
 
 /* Allocate and set an error message, using printf semantics */
 static void hhm_set_error(hardhat_maker_t *hhm, const char *fmt, ...) {
-	int r;
+	int r, err;
 	va_list ap;
 
 	if(!hhm)
 		return;
+
+	err = errno;
 
 	if(hhm->error != enomem)
 		free(hhm->error);
@@ -251,6 +259,8 @@ static void hhm_set_error(hardhat_maker_t *hhm, const char *fmt, ...) {
 	} else {
 		hhm->error = enomem;
 	}
+
+	errno = err;
 }
 
 static uint32_t makeseed(void) {
@@ -285,87 +295,6 @@ static uint32_t makeseed(void) {
 		clocks++;
 #endif
 	return calchash_murmur3((const void *)ts, sizeof *ts * clocks, getpid());
-}
-
-/* Allocate and initialize a hardhat_maker_t structure.
-	Returns NULL on failure, with errno set to the problem. */
-export hardhat_maker_t *hardhat_maker_new(const char *filename) {
-	hardhat_maker_t *hhm;
-	int err, fd;
-
-	if(!filename) {
-		errno = EINVAL;
-		return NULL;
-	}
-
-	hhm = malloc(sizeof *hhm);
-	if(!hhm)
-		return NULL;
-
-	*hhm = hardhat_maker_0;
-
-	hhm->superblock.hashseed = makeseed();
-	hhm->superblock.alignment = HARDHAT_DEFAULT_ALIGNMENT;
-	hhm->superblock.blocksize = HARDHAT_DEFAULT_BLOCKSIZE;
-
-	hhm->filename = strdup(filename);
-	if(!hhm->filename) {
-		err = errno;
-		hardhat_maker_free(hhm);
-		errno = err;
-		return NULL;
-	}
-
-	hhm->keybuf = malloc(65536);
-	if(!hhm->keybuf) {
-		err = errno;
-		hardhat_maker_free(hhm);
-		errno = err;
-		return NULL;
-	}
-
-	fd = open(filename, O_RDWR|O_CREAT|O_LARGEFILE|O_NOCTTY, 0666);
-	if(fd == -1) {
-		err = errno;
-		hardhat_maker_free(hhm);
-		errno = err;
-		return NULL;
-	}
-
-	hhm->db = fdopen(fd, "r+");
-	if(!hhm->db) {
-		err = errno;
-		close(fd);
-		hardhat_maker_free(hhm);
-		errno = err;
-		return NULL;
-	}
-
-	hhm->off = hhm->superblock.data_start = sizeof hhm->superblock;
-	if(fwrite(&hhm->superblock, 1, sizeof hhm->superblock, hhm->db) < sizeof hhm->superblock) {
-		err = errno;
-		hardhat_maker_free(hhm);
-		errno = err;
-		return NULL;
-	}
-
-	hhm->recbuf = malloc(hhm->recbufsize * sizeof *hhm->recbuf);
-	if(!hhm->recbuf) {
-		err = errno;
-		hardhat_maker_free(hhm);
-		errno = err;
-		return NULL;
-	}
-
-	hhm->hashtable = newhash();
-	if(!hhm->hashtable) {
-		err = errno;
-		hardhat_maker_free(hhm);
-		errno = err;
-		return NULL;
-	}
-
-	return hhm;
 }
 
 export uint64_t hardhat_maker_alignment(hardhat_maker_t *hhm, uint64_t alignment) {
@@ -410,28 +339,86 @@ export uint64_t hardhat_maker_blocksize(hardhat_maker_t *hhm, uint64_t blocksize
 
 /* Write bytes to the database and handle any errors */
 static bool hhm_db_write(hardhat_maker_t *hhm, const void *buf, size_t len) {
+	ssize_t r;
+
 	if(!len)
 		return true;
 
-	if(fwrite(buf, 1, len, hhm->db) < len) {
-		hhm_set_error(hhm, "writing %d bytes to %s failed: %m", len, hhm->filename);
-		hhm->failed = true;
-		return false;
+	while(len) {
+		r = write(hhm->fd, buf, len);
+		switch(r) {
+			case -1:
+				hhm_set_error(hhm, "writing %zu bytes to %s failed: %m", len, hhm->filename);
+				hhm->failed = true;
+				return false;
+			case 0:
+				hhm_set_error(hhm, "writing %zu bytes to %s failed: short write", len, hhm->filename);
+				hhm->failed = true;
+				errno = EAGAIN;
+				return false;
+			default:
+				len -= r;
+				buf = (const uint8_t *)buf + r;
+		}
 	}
 
 	return true;
 }
 
+static bool hhm_db_flush(hardhat_maker_t *hhm) {
+	size_t len = hhm->outbuflen;
+	if(!len)
+		return true;
+	hhm->outbuflen = 0;
+	return hhm_db_write(hhm, hhm->outbuf, len);
+}
+
 /* Append bytes to the database and update off */
 static bool hhm_db_append(hardhat_maker_t *hhm, const void *buf, size_t len) {
-	if(!hhm_db_write(hhm, buf, len))
-		return false;
+	size_t remaining;
+
+	if(!len)
+		return true;
+
+	if(len >= OUTBUFSIZE) {
+		if(!hhm_db_flush(hhm))
+			return false;
+		if(!hhm_db_write(hhm, buf, len))
+			return false;
+	} else {
+		remaining = OUTBUFSIZE - hhm->outbuflen;
+		if(len > remaining) {
+			memcpy(hhm->outbuf + hhm->outbuflen, buf, remaining);
+			if(!hhm_db_write(hhm, hhm->outbuf, OUTBUFSIZE))
+				return false;
+
+			hhm->outbuflen = len - remaining;
+			memcpy(hhm->outbuf, (const uint8_t *)buf + remaining, hhm->outbuflen);
+		} else {
+			memcpy(hhm->outbuf + hhm->outbuflen, buf, len);
+			hhm->outbuflen += len;
+			if(len == remaining && !hhm_db_flush(hhm))
+				return false;
+		}
+	}
+
 	hhm->off += len;
 	return true;
 }
 
+static bool hhm_db_seek(hardhat_maker_t *hhm, off_t off, int whence) {
+	if(!hhm_db_flush(hhm))
+		return false;
+	if(lseek(hhm->fd, off, whence) == -1) {
+		hhm_set_error(hhm, "seeking %lld bytes into %s failed: %m", (long long)off, hhm->filename);
+		hhm->failed = true;
+		return false;
+	}
+	return true;
+}
+
 static bool hhm_db_pad(hardhat_maker_t *hhm, size_t length, size_t alignment) {
-	size_t blocksize, offset, align, start, end;
+	size_t blocksize, offset, align, start, end, remaining;
 
 	blocksize = 1 << hhm->superblock.blocksize;
 	offset = hhm->off;
@@ -445,14 +432,26 @@ static bool hhm_db_pad(hardhat_maker_t *hhm, size_t length, size_t alignment) {
 	if(start > end)
 		align += -offset % blocksize;
 
-	if(fseek(hhm->db, align, SEEK_CUR) == -1) {
-		hhm_set_error(hhm, "seeking %zu bytes in %s failed: %m", align, hhm->filename);
-		hhm->failed = true;
-		return false;
+	if(align >= OUTBUFSIZE) {
+		if(!hhm_db_seek(hhm, align, SEEK_CUR))
+			return false;
+	} else {
+		remaining = OUTBUFSIZE - hhm->outbuflen;
+		if(align > remaining) {
+			memset(hhm->outbuf + hhm->outbuflen, 0, remaining);
+			if(!hhm_db_write(hhm, hhm->outbuf, OUTBUFSIZE))
+				return false;
+			hhm->outbuflen = align - remaining;
+			memset(hhm->outbuf, 0, hhm->outbuflen);
+		} else {
+			memset(hhm->outbuf + hhm->outbuflen, 0, align);
+			hhm->outbuflen += align;
+			if(align == remaining && !hhm_db_flush(hhm))
+				return false;
+		}
 	}
 
 	hhm->off += align;
-
 	return true;
 }
 
@@ -462,13 +461,9 @@ static const uint8_t *hhm_getrec(hardhat_maker_t *hhm, uint64_t off) {
 	if(hhm->windowsize <= off) {
 		if(hhm->window != MAP_FAILED)
 			munmap(hhm->window, hhm->windowsize);
-		if(fflush(hhm->db) == EOF) {
-			hhm_set_error(hhm, "writing to %s failed: %m", hhm->filename);
-			hhm->window = MAP_FAILED;
-			hhm->failed = true;
+		if(!hhm_db_flush(hhm))
 			return NULL;
-		}
-		hhm->window = mmap(NULL, hhm->off, PROT_READ, MAP_SHARED, fileno(hhm->db), 0);
+		hhm->window = mmap(NULL, hhm->off, PROT_READ, MAP_SHARED, hhm->fd, 0);
 		if(hhm->window == MAP_FAILED) {
 			hhm_set_error(hhm, "mmap()ing %s failed: %m", hhm->filename);
 			hhm->failed = true;
@@ -477,6 +472,86 @@ static const uint8_t *hhm_getrec(hardhat_maker_t *hhm, uint64_t off) {
 		hhm->windowsize = hhm->off;
 	}
 	return hhm->window + off;
+}
+
+/* Allocate and initialize a hardhat_maker_t structure.
+	Returns NULL on failure, with errno set to the problem. */
+export hardhat_maker_t *hardhat_maker_new(const char *filename) {
+	hardhat_maker_t *hhm;
+	int err;
+
+	if(!filename) {
+		errno = EINVAL;
+		return NULL;
+	}
+
+	hhm = malloc(sizeof *hhm);
+	if(!hhm)
+		return NULL;
+
+	*hhm = hardhat_maker_0;
+
+	hhm->superblock.hashseed = makeseed();
+	hhm->superblock.alignment = HARDHAT_DEFAULT_ALIGNMENT;
+	hhm->superblock.blocksize = HARDHAT_DEFAULT_BLOCKSIZE;
+
+	hhm->filename = strdup(filename);
+	if(!hhm->filename) {
+		err = errno;
+		hardhat_maker_free(hhm);
+		errno = err;
+		return NULL;
+	}
+
+	hhm->keybuf = malloc(65536);
+	if(!hhm->keybuf) {
+		err = errno;
+		hardhat_maker_free(hhm);
+		errno = err;
+		return NULL;
+	}
+
+	hhm->outbuf = malloc(OUTBUFSIZE);
+	if(!hhm->outbuf) {
+		err = errno;
+		hardhat_maker_free(hhm);
+		errno = err;
+		return NULL;
+	}
+
+	hhm->fd = open(filename, O_RDWR|O_CREAT|O_LARGEFILE|O_NOCTTY, 0666);
+	if(hhm->fd == -1) {
+		err = errno;
+		hardhat_maker_free(hhm);
+		errno = err;
+		return NULL;
+	}
+
+	if(!hhm_db_append(hhm, &hhm->superblock, sizeof hhm->superblock) || !hhm_db_flush(hhm)) {
+		err = errno;
+		hardhat_maker_free(hhm);
+		errno = err;
+		return NULL;
+	}
+	hhm->superblock.data_start = hhm->off;
+
+	hhm->recbuf = malloc(hhm->recbufsize * sizeof *hhm->recbuf);
+	if(!hhm->recbuf) {
+		err = errno;
+		hardhat_maker_free(hhm);
+		errno = err;
+		return NULL;
+	}
+
+	hhm->hashtable = newhash();
+	if(!hhm->hashtable) {
+		err = errno;
+		hardhat_maker_free(hhm);
+		errno = err;
+		return NULL;
+	}
+
+	return hhm;
 }
 
 /* Add an entry to the database (if it doesn't exist yet).
@@ -740,7 +815,7 @@ static size_t common_parents(const uint8_t *a, size_t al, const uint8_t *b, size
 
 /* Finish up the database by writing the indexes and the superblock */
 export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
-	FILE *db;
+	int fd;
 	struct hashtable *ht;
 	struct hashentry *he;
 	uint32_t i, num, pfxnum;
@@ -753,15 +828,9 @@ export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 		return false;
 	}
 
-	db = hhm->db;
 	num = hhm->recnum;
 	hhm->superblock.data_end = hhm->off;
 	qsort_data = hhm;
-
-	if(!hhm_db_pad(hhm, num * sizeof *dir, sizeof *dir)) {
-		hhm->failed = true;
-		return false;
-	}
 
 	/* Sort the hashtable in directory order */
 	ht = hhm->hashtable;
@@ -770,6 +839,9 @@ export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 		hhm->failed = true;
 		return false;
 	}
+
+	if(!hhm_db_pad(hhm, num * sizeof *dir, sizeof *dir))
+		return false;
 
 	hhm->superblock.directory_start = hhm->off;
 
@@ -795,10 +867,8 @@ export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 	/* Now sort the hashtable again, this time on hash value */
 	qsort(ht->buf, num, sizeof *ht->buf, qsort_hash_cmp);
 
-	if(!hhm_db_pad(hhm, num * sizeof *ht->buf, sizeof *ht->buf)) {
-		hhm->failed = true;
+	if(!hhm_db_pad(hhm, num * sizeof *ht->buf, sizeof *ht->buf))
 		return false;
-	}
 
 	hhm->superblock.hash_start = hhm->off;
 
@@ -852,10 +922,8 @@ export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 	/* Write out the prefix list as a hash table */
 	qsort(ht->buf, pfxnum, sizeof *ht->buf, qsort_hash_cmp);
 
-	if(!hhm_db_pad(hhm, pfxnum  * sizeof *ht->buf, sizeof *ht->buf)) {
-		hhm->failed = true;
+	if(!hhm_db_pad(hhm, pfxnum  * sizeof *ht->buf, sizeof *ht->buf))
 		return false;
-	}
 
 	hhm->superblock.prefix_start = hhm->off;
 
@@ -873,37 +941,31 @@ export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 	hhm->superblock.filesize = hhm->off;
 	hhm->superblock.checksum = calchash_murmur3((const void *)&hhm->superblock, sizeof hhm->superblock - 4, hhm->superblock.hashseed);
 
-	if(fseek(db, 0, SEEK_SET) == -1) {
-		hhm_set_error(hhm, "seeking in %s failed: %m", hhm->filename);
-		hhm->failed = true;
+	if(!hhm_db_seek(hhm, 0, SEEK_SET))
 		return false;
-	}
 
 	if(!hhm_db_write(hhm, &hhm->superblock, sizeof hhm->superblock))
 		return false;
 
-	hhm->db = NULL;
-	if(fflush(db) == EOF) {
-		hhm_set_error(hhm, "writing to %s failed: %m", hhm->filename);
+	if(!hhm_db_flush(hhm))
+		return false;
+
+	fd = hhm->fd;
+	if(ftruncate(fd, (off_t)hhm->off) == -1) {
+		hhm_set_error(hhm, "truncating %s failed: %m", hhm->filename);
 		hhm->failed = true;
 		return false;
 	}
 
-	if(ftruncate(fileno(db), (off_t)hhm->off) == -1) {
-		hhm_set_error(hhm, "padding %s failed: %m", hhm->filename);
-		hhm->failed = true;
-		return false;
-	}
-
-	if(fdatasync(fileno(db)) == -1) {
+	if(fdatasync(fd) == -1) {
 		hhm_set_error(hhm, "writing %s failed: %m", hhm->filename);
 		hhm->failed = true;
 		return false;
 	}
 
-	hhm->db = NULL;
-	if(fclose(db) == EOF) {
-		hhm_set_error(hhm, "writing to %s failed: %m", hhm->filename);
+	hhm->fd = -1;
+	if(close(fd) == -1) {
+		hhm_set_error(hhm, "closing %s failed: %m", hhm->filename);
 		hhm->failed = true;
 		return false;
 	}
@@ -917,23 +979,8 @@ export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 export void hardhat_maker_free(hardhat_maker_t *hhm) {
 	if(!hhm)
 		return;
-	if(hhm->db) {
-		/* Various gambits to prevent flushing the buffer.
-		** Unfinished shutdown may be due to a fork(), in which case
-		** our flushing could theoretically corrupt the result. */
-#if defined(HAVE_FPURGE)
-		fpurge(hhm->db);
-#elif defined(HAVE___FPURGE)
-		__fpurge(hhm->db);
-#elif defined(HAVE_FILENO)
-		int fd = open("/dev/null", O_NOCTTY|O_WRONLY);
-		if(fd != -1) {
-			dup2(fd, fileno(hhm->db));
-			close(fd);
-		}
-#endif
-		fclose(hhm->db);
-	}
+	if(hhm->fd != -1)
+		close(hhm->fd);
 	freehash(hhm->hashtable);
 	free(hhm->keybuf);
 	free(hhm->recbuf);
