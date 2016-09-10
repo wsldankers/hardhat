@@ -530,7 +530,7 @@ export bool hardhat_maker_add(hardhat_maker_t *hhm, const void *key, uint16_t ke
 	/* For padding purposes, only use the size fields in the calculation. */
 	/* Using more would cause the file to increase in size significantly. */
 
-	if(!hhm_db_pad(hhm, 6, 4))
+	if(!hhm_db_pad(hhm, (size_t)6 + (size_t)datalen, 4))
 		return false;
 
 	off = hhm->off;

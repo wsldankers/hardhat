@@ -42,6 +42,11 @@ extern bool hardhat_maker_fatal(hardhat_maker_t *hhm);
    Returns NULL (and sets errno) on error. */
 extern hardhat_maker_t *hardhat_maker_new(const char *filename);
 
+/* Configure the alignment to use for this database. Must be powers of 2.
+   Supply a value of 0 to revert to the defaults. Supply a value 1 to
+   disable alignment. */
+extern bool hardhat_maker_set_alignment(hardhat_maker_t *hhm, size_t alignment, size_t blocksize);
+
 /* Add an entry. Will silently ignore attempts to add duplicate keys
    (and even return true). Returns false on error. */
 extern bool hardhat_maker_add(hardhat_maker_t *hhm, const void *key, uint16_t keylen, const void *data, uint32_t datalen);
