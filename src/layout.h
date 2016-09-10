@@ -1,7 +1,7 @@
 /******************************************************************************
 
 	hardhat - read and write databases optimized for filename-like keys
-	Copyright (c) 2011,2012 Wessel Dankers <wsl@fruit.je>
+	Copyright (c) 2011-2016 Wessel Dankers <wsl@fruit.je>
 
 	This program is free software; you can redistribute it and/or modify
 	it under the terms of the GNU General Public License as published by
@@ -28,24 +28,25 @@
 	Defines the hardhat superblock. Padded to 4096 bytes.
 
 	The hardhat file format uses 4 major data sections. Each section is
-	aligned to 4096 bytes.
+	aligned so as not to cross 4096-byte boundaries unnecessarily.
 
-	The first is the data itself, laid out as:
+	The first section is the data itself, laid out as:
 		data length (4 bytes)
 		key length (2 bytes)
 		key (up to 2^16 bytes)
 		data (up to 2^32 bytes)
-	The start of each entry is 4-byte aligned.
+	The start of each entry is 4-byte aligned. The data is aligned to
+	the alignment value in the superblock (only in database versions 3+).
 
-	The second is the directory, which is a list of offsets of all
+	The second section is the directory, which is a list of offsets of all
 	key/value pairs, sorted in the order defined in hardhat_cmp().
 	These offsets are represented as 64-bit unsigned integers.
 
-	The third is a hash table of all entries, with each entry an index
-	into the directory.
+	The third section is a hash table of all entries, with each entry an
+	index into the directory.
 
-	The fourth is a hash table of all prefixes, with each entry an index
-	into the directory.
+	The fourth section is a hash table of all prefixes, with each entry an
+	index into the directory.
 
 	The hash tables that are written to disk are a bastardized form of
 	hash tables that is really a sorted list of the hash values. Lookup
@@ -69,8 +70,12 @@ struct hardhat {
 	uint64_t byteorder;
 	/* Database version */
 	uint32_t version;
-	/* Alignment for data values */
-	uint32_t alignment;
+	/* Alignment for data values (exponent) */
+	uint8_t alignment;
+	/* Unused; currently set to 12 */
+	uint8_t blocksize;
+	/* To ensure proper alignment */
+	uint16_t padding;
 	/* Size of the database file, to detect truncated databases */
 	uint64_t filesize;
 	/* Start and end of the section containing the entries themselves */
