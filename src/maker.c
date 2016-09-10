@@ -528,15 +528,17 @@ export bool hardhat_maker_add(hardhat_maker_t *hhm, const void *key, uint16_t ke
 
 	hhm->started = true;
 
-	recsize = (size_t)6 + (size_t)keylen;
+	recsize = (size_t)6 + (size_t)keylen + (size_t)datalen;
 
-	/* Write out the entry to disk */
-	if(!hhm_db_pad(hhm, recsize, 4))
+	/* For padding purposes, only use the size fields in the calculation. */
+	/* Using more would cause the file to increase in size significantly. */
+
+	if(!hhm_db_pad(hhm, 6, 4))
 		return false;
 
-	recsize += (size_t)datalen;
-
 	off = hhm->off;
+
+	/* Write out the entry to disk */
 
 	if(!hhm_db_append(hhm, &datalen, sizeof datalen))
 		return false;
