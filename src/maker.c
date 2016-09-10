@@ -469,7 +469,6 @@ static const uint8_t *hhm_getrec(hardhat_maker_t *hhm, uint64_t off) {
 	Returns true on success (or if the entry already existed!)
 	Returns false on error. */
 export bool hardhat_maker_add(hardhat_maker_t *hhm, const void *key, uint16_t keylen, const void *data, uint32_t datalen) {
-	size_t recsize;
 	uint32_t hash, hp, value;
 	uint64_t off;
 	struct hashtable *ht;
@@ -527,8 +526,6 @@ export bool hardhat_maker_add(hardhat_maker_t *hhm, const void *key, uint16_t ke
 	}
 
 	hhm->started = true;
-
-	recsize = (size_t)6 + (size_t)keylen + (size_t)datalen;
 
 	/* For padding purposes, only use the size fields in the calculation. */
 	/* Using more would cause the file to increase in size significantly. */
