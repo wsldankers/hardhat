@@ -58,7 +58,7 @@ static bool HHE(hhc_validate)(hardhat_t *hardhat, const struct stat *st) {
 		if(HHE(hhc_calchash)(hardhat, (const void *)hardhat, sizeof(struct oldhardhat) - 4)
 				!= u32(((struct oldhardhat *)hardhat)->checksum))
 			return false;
-		if(hardhat->alignment)
+		if(hardhat->alignment || hardhat->blocksize)
 			return false;
 	} else if(u32(hardhat->version) <= UINT32_C(3)) {
 		if(HHE(hhc_calchash)(hardhat, (const void *)hardhat, sizeof *hardhat - 4)
@@ -71,6 +71,9 @@ static bool HHE(hhc_validate)(hardhat_t *hardhat, const struct stat *st) {
 	} else {
 		return false;
 	}
+
+	if(hardhat->padding)
+		return false;
 
 	if(u64(hardhat->data_start) % sizeof(uint32_t))
 		return false;
@@ -134,6 +137,18 @@ static bool HHE(hhc_validate)(hardhat_t *hardhat, const struct stat *st) {
 		return false;
 
 	return true;
+}
+
+static uint64_t HHE(hardhat_alignment)(hardhat_t *hardhat) {
+    return u32(hardhat->version) < 3
+		? UINT64_C(1)
+		: UINT64_C(1) << hardhat->alignment;
+}
+
+static uint64_t HHE(hardhat_blocksize)(hardhat_t *hardhat) {
+    return u32(hardhat->version) < 3
+		? UINT64_C(4096)
+		: UINT64_C(1) << hardhat->blocksize;
 }
 
 static void HHE(hardhat_precache)(hardhat_t *hardhat, bool data) {

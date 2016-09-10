@@ -72,7 +72,7 @@ struct hardhat {
 	uint32_t version;
 	/* Alignment for data values (exponent) */
 	uint8_t alignment;
-	/* Unused; currently set to 12 */
+	/* Block size used when writing this database (exponent) */
 	uint8_t blocksize;
 	/* To ensure proper alignment */
 	uint16_t padding;

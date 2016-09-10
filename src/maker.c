@@ -368,7 +368,7 @@ export hardhat_maker_t *hardhat_maker_new(const char *filename) {
 	return hhm;
 }
 
-export bool hardhat_maker_set_alignment(hardhat_maker_t *hhm, size_t alignment, size_t blocksize) {
+export bool hardhat_maker_set_alignment(hardhat_maker_t *hhm, size_t alignment) {
 	if(!hhm || hhm->failed)
 		return false;
 
@@ -379,12 +379,26 @@ export bool hardhat_maker_set_alignment(hardhat_maker_t *hhm, size_t alignment, 
 		if(alignment & (alignment - 1))
 			return hhm_set_error(hhm, "data alignment must be a power of 2"), false;
 		hhm->superblock.alignment = ffs(alignment) - 1;
+	} else {
+		hhm->superblock.alignment = HARDHAT_DEFAULT_ALIGNMENT;
 	}
+
+	return true;
+}
+
+export bool hardhat_maker_set_blocksize(hardhat_maker_t *hhm, size_t blocksize) {
+	if(!hhm || hhm->failed)
+		return false;
+
+	if(hhm->started)
+		return hhm_set_error(hhm, "can't change blocksize after output has started"), false;
 
 	if(blocksize) {
 		if(blocksize & (blocksize - 1))
 			return hhm_set_error(hhm, "block size must be a power of 2"), false;
 		hhm->superblock.blocksize = ffs(blocksize) - 1;
+	} else {
+		hhm->superblock.blocksize = HARDHAT_DEFAULT_BLOCKSIZE;
 	}
 
 	return true;

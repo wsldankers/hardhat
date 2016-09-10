@@ -140,7 +140,25 @@ export hardhat_t *hardhat_open(const char *filename) {
 
 	return buf;
 }
-	
+
+export uint64_t hardhat_alignment(hardhat_t *hardhat) {
+	if(!hardhat)
+		return 0;
+
+	return hardhat->byteorder == UINT64_C(0x0123456789ABCDEF)
+		? hardhat_alignment_ne(hardhat)
+		: hardhat_alignment_oe(hardhat);
+}
+
+export uint64_t hardhat_blocksize(hardhat_t *hardhat) {
+	if(!hardhat)
+		return 0;
+
+	return hardhat->byteorder == UINT64_C(0x0123456789ABCDEF)
+		? hardhat_blocksize_ne(hardhat)
+		: hardhat_blocksize_oe(hardhat);
+}
+
 export void hardhat_precache(hardhat_t *hardhat, bool do_data) {
 	if(!hardhat)
 		return;

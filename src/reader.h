@@ -61,6 +61,14 @@ typedef struct hardhat_cursor {
    otherwise unusable. */
 extern hardhat_t *hardhat_open(const char *filename);
 
+/* Query the alignment for the data entries in this database. */
+extern uint64_t hardhat_alignment(hardhat_t *);
+#define HAVE_HARDHAT_ALIGNMENT
+
+/* Query the blocksize used when writing this database. */
+extern uint64_t hardhat_blocksize(hardhat_t *);
+#define HAVE_HARDHAT_BLOCKSIZE
+
 /* Fill the buffer cache so that subsequent accesses are not limited by
    rotational storage seektimes. May block. */
 extern void hardhat_precache(hardhat_t *, bool data);

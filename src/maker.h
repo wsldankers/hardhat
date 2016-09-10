@@ -43,14 +43,20 @@ extern bool hardhat_maker_fatal(hardhat_maker_t *hhm);
 extern hardhat_maker_t *hardhat_maker_new(const char *filename);
 
 /* Configure the alignment to use for this database.
-   The first value determines how stored values are aligned.
-   The second value determines page boundaries to avoid when
-   writing out keys and indexes.
+   The value determines how stored values are aligned.
    Must be powers of 2.
-   Supply a value of 0 to leave a value unchanged.
+   Supply a value of 0 to revert to the default alignment.
    Supply a value 1 to disable alignment. */
-extern bool hardhat_maker_set_alignment(hardhat_maker_t *hhm, size_t alignment, size_t blocksize);
+extern bool hardhat_maker_set_alignment(hardhat_maker_t *hhm, size_t alignment);
 #define HAVE_HARDHAT_MAKER_SET_ALIGNMENT
+
+/* Configure the block size for this database. The value determines the
+   size of the block boundaries to avoid when writing out keys and indexes.
+   Must be a power of 2.
+   Supply a value of 0 to revert to the default block size.
+   Supply a value 1 to disable block size optimizations. */
+extern bool hardhat_maker_set_blocksize(hardhat_maker_t *hhm, size_t blocksize);
+#define HAVE_HARDHAT_MAKER_SET_BLOCSIZE
 
 /* Add an entry. Will silently ignore attempts to add duplicate keys
    (and even return true). Returns false on error. */
