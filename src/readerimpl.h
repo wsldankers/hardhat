@@ -239,14 +239,6 @@ static inline bool HHE(hhc_fetch_entry)(hardhat_cursor_t *c) {
 	if(off + reclen < off || off + reclen > data_end)
 		return false;
 
-	datalen = u32read(rec);
-	if(reclen + datalen < reclen)
-		return false;
-
-	reclen += datalen;
-	if(off + reclen < off || off + reclen > data_end)
-		return false;
-
 	if(u32(hardhat->version) >= UINT32_C(3)) {
 		datapad = -(off + reclen) % (UINT64_C(1) << hardhat->alignment);
 		if(reclen + datapad < reclen)
@@ -258,6 +250,14 @@ static inline bool HHE(hhc_fetch_entry)(hardhat_cursor_t *c) {
 	} else {
 		datapad = 0;
 	}
+
+	datalen = u32read(rec);
+	if(reclen + datalen < reclen)
+		return false;
+
+	reclen += datalen;
+	if(off + reclen < off || off + reclen > data_end)
+		return false;
 
 	c->key = rec + 6;
 	c->keylen = keylen;
