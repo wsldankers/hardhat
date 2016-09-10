@@ -97,7 +97,6 @@ static const hardhat_maker_t hardhat_maker_0 = {
 	.recbufsize = 65536,
 	.pagesize = HARDHAT_DEFAULT_PAGESIZE,
 	.window = MAP_FAILED,
-	.superblock = { .alignment = HARDHAT_DEFAULT_ALIGNMENT },
 };
 
 #ifndef O_LARGEFILE
@@ -309,6 +308,7 @@ export hardhat_maker_t *hardhat_maker_new(const char *filename) {
 	*hhm = hardhat_maker_0;
 
 	hhm->superblock.hashseed = makeseed();
+	hhm->superblock.alignment = HARDHAT_DEFAULT_ALIGNMENT;
 
 	hhm->filename = strdup(filename);
 	if(!hhm->filename) {
@@ -343,14 +343,13 @@ export hardhat_maker_t *hardhat_maker_new(const char *filename) {
 		return NULL;
 	}
 
-	hhm->off = sizeof hhm->superblock;
-	if(fseek(hhm->db, hhm->off, SEEK_SET) == -1) {
+	hhm->off = hhm->superblock.data_start = sizeof hhm->superblock;
+	if(fwrite(&hhm->superblock, 1, sizeof hhm->superblock, hhm->db) < sizeof hhm->superblock) {
 		err = errno;
 		hardhat_maker_free(hhm);
 		errno = err;
 		return NULL;
 	}
-	hhm->superblock.data_start = hhm->off;
 
 	hhm->recbuf = malloc(hhm->recbufsize * sizeof *hhm->recbuf);
 	if(!hhm->recbuf) {
