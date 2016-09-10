@@ -64,6 +64,10 @@ static bool HHE(hhc_validate)(hardhat_t *hardhat, const struct stat *st) {
 		if(HHE(hhc_calchash)(hardhat, (const void *)hardhat, sizeof *hardhat - 4)
 				!= u32(hardhat->checksum))
 			return false;
+		if(hardhat->alignment >= 64)
+			return false;
+		if(hardhat->blocksize >= 64)
+			return false;
 	} else {
 		return false;
 	}
@@ -201,9 +205,9 @@ static void HHE(hardhat_debug_dump)(hardhat_t *hardhat) {
 **	extreme care to guard against integer overflow/wrap and pointers outside
 **	the memory mapped region.
 **
-**	Usage: fill in the cursor hardhat and cur fields. This function will
-**	either return false (if an anomaly was detected) or fill in the key,
-**	keylen, data and datalen fields and return true.
+**	Usage: fill in the hardhat and cur fields of the hardhat_cursor_t.
+**	This function will either return false (if an anomaly was detected) or
+**	fill in the key, keylen, data and datalen fields and return true.
 */
 static inline bool HHE(hhc_fetch_entry)(hardhat_cursor_t *c) {
 	uint16_t keylen;
@@ -244,7 +248,7 @@ static inline bool HHE(hhc_fetch_entry)(hardhat_cursor_t *c) {
 		return false;
 
 	if(u32(hardhat->version) >= UINT32_C(3)) {
-		datapad = -(off + reclen) % ((uint64_t)u32(hardhat->alignment) + UINT64_C(1));
+		datapad = -(off + reclen) % (UINT64_C(1) << hardhat->alignment);
 		if(reclen + datapad < reclen)
 			return false;
 
