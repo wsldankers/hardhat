@@ -368,40 +368,44 @@ export hardhat_maker_t *hardhat_maker_new(const char *filename) {
 	return hhm;
 }
 
-export bool hardhat_maker_set_alignment(hardhat_maker_t *hhm, size_t alignment) {
-	if(!hhm || hhm->failed)
-		return false;
+export uint64_t hardhat_maker_alignment(hardhat_maker_t *hhm, uint64_t alignment) {
+	uint64_t prev;
 
-	if(hhm->started)
-		return hhm_set_error(hhm, "can't change alignment after output has started"), false;
+	if(!hhm || hhm->failed)
+		return 0;
+
+	prev = UINT64_C(1) << hhm->superblock.alignment;
 
 	if(alignment) {
+		if(hhm->started)
+			return hhm_set_error(hhm, "can't change alignment after output has started"), 0;
+
 		if(alignment & (alignment - 1))
-			return hhm_set_error(hhm, "data alignment must be a power of 2"), false;
+			return hhm_set_error(hhm, "data alignment must be a power of 2"), 0;
 		hhm->superblock.alignment = ffs(alignment) - 1;
-	} else {
-		hhm->superblock.alignment = HARDHAT_DEFAULT_ALIGNMENT;
 	}
 
-	return true;
+	return prev;
 }
 
-export bool hardhat_maker_set_blocksize(hardhat_maker_t *hhm, size_t blocksize) {
-	if(!hhm || hhm->failed)
-		return false;
+export uint64_t hardhat_maker_blocksize(hardhat_maker_t *hhm, uint64_t blocksize) {
+	uint64_t prev;
 
-	if(hhm->started)
-		return hhm_set_error(hhm, "can't change blocksize after output has started"), false;
+	if(!hhm || hhm->failed)
+		return 0;
+
+	prev = UINT64_C(1) << hhm->superblock.blocksize;
 
 	if(blocksize) {
+		if(hhm->started)
+			return hhm_set_error(hhm, "can't change blocksize after output has started"), 0;
+
 		if(blocksize & (blocksize - 1))
-			return hhm_set_error(hhm, "block size must be a power of 2"), false;
+			return hhm_set_error(hhm, "block size must be a power of 2"), 0;
 		hhm->superblock.blocksize = ffs(blocksize) - 1;
-	} else {
-		hhm->superblock.blocksize = HARDHAT_DEFAULT_BLOCKSIZE;
 	}
 
-	return true;
+	return prev;
 }
 
 /* Write bytes to the database and handle any errors */
