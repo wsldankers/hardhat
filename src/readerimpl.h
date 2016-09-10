@@ -255,6 +255,8 @@ static inline bool HHE(hhc_fetch_entry)(hardhat_cursor_t *c) {
 		reclen += datapad;
 		if(off + reclen < off || off + reclen > data_end)
 			return false;
+	} else {
+		datapad = 0;
 	}
 
 	c->key = rec + 6;
@@ -462,7 +464,6 @@ static uint32_t HHE(hhc_prefix_find)(hardhat_t *hardhat, const void *str, uint16
 			if(u32(hardhat->version) < 3)
 				break;
 			lookup.cur = u32(he->data);
-			he_data = u32(he->data);
 			if(!HHE(hhc_fetch_entry)(&lookup))
 				return CURSOR_NONE;
 			if(lookup.keylen < len) {
@@ -519,7 +520,7 @@ static uint32_t HHE(hhc_prefix_find)(hardhat_t *hardhat, const void *str, uint16
 		he_hash = u32(he->hash);
 		if(he_hash != hash)
 			break;
-		lookup.cur = u32(he->data);
+		lookup.cur = he_data = u32(he->data);
 		if(!HHE(hhc_fetch_entry)(&lookup))
 			return CURSOR_NONE;
 		if(lookup.cur) {
@@ -538,7 +539,7 @@ static uint32_t HHE(hhc_prefix_find)(hardhat_t *hardhat, const void *str, uint16
 		he_hash = u32(he->hash);
 		if(he_hash != hash)
 			break;
-		lookup.cur = u32(he->data);
+		lookup.cur = he_data = u32(he->data);
 		if(!HHE(hhc_fetch_entry)(&lookup))
 			return CURSOR_NONE;
 		if(lookup.cur) {
