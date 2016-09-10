@@ -44,7 +44,7 @@ extern hardhat_maker_t *hardhat_maker_new(const char *filename);
 
 /* Configure the alignment to use for this database.
    The value determines how stored values are aligned.
-   Returns the previous alignment value.
+   Returns the previous alignment value or 0 on error.
    Must be powers of 2.
    Supply a value of 0 to query the current alignment.
    Supply a value 1 to disable alignment. */
@@ -53,7 +53,7 @@ extern uint64_t hardhat_maker_alignment(hardhat_maker_t *hhm, uint64_t alignment
 
 /* Configure the block size for this database. The value determines the
    size of the block boundaries to avoid when writing out keys and indexes.
-   Returns the previous block size.
+   Returns the previous block size or 0 on error.
    Must be a power of 2.
    Supply a value of 0 to query the current block size.
    Supply a value 1 to disable block size optimizations. */
