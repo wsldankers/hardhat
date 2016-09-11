@@ -6,8 +6,9 @@ AC_CONFIG_MACRO_DIR([m4])
 AC_CONFIG_SRCDIR([src/hardhat.c])
 AC_CONFIG_HEADERS([src/config.h])
 
-AC_DEFINE([_GNU_SOURCE], 1, [needed for some calls])
-AC_DEFINE([_XOPEN_SOURCE], 500, [needed for some calls])
+AC_DEFINE(_GNU_SOURCE, 1, [needed for some calls])
+AC_DEFINE(_FILE_OFFSET_BITS, 64, [gnu libc has insane defaults])
+AC_DEFINE(_XOPEN_SOURCE, 500, [needed for some calls])
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_PROG_CC

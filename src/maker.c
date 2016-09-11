@@ -432,6 +432,9 @@ static bool hhm_db_pad(hardhat_maker_t *hhm, size_t length, size_t alignment) {
 	if(start > end)
 		align += -offset % blocksize;
 
+	if(!align)
+		return true;
+
 	if(align >= OUTBUFSIZE) {
 		if(!hhm_db_seek(hhm, align, SEEK_CUR))
 			return false;
