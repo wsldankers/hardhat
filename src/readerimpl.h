@@ -227,7 +227,8 @@ static void HHE(hardhat_debug_dump)(hardhat_t *hardhat) {
 static inline bool HHE(hhc_fetch_entry)(hardhat_cursor_t *c) {
 	uint16_t keylen;
 	uint32_t recnum, index;
-	uint64_t off, reclen, data_start, data_end, datalen, datapad;
+	uint64_t off, reclen, data_start, data_end, datalen, datapad, blocksize;
+	uint64_t data_off, data_extrapad, start, end;
 	const uint8_t *rec, *buf;
 	const struct hardhat *hardhat;
 	const uint64_t *directory;
@@ -254,8 +255,31 @@ static inline bool HHE(hhc_fetch_entry)(hardhat_cursor_t *c) {
 	if(off + reclen < off || off + reclen > data_end)
 		return false;
 
+	datalen = u32read(rec);
+
 	if(u32(hardhat->version) >= UINT32_C(3)) {
 		datapad = -(off + reclen) % (UINT64_C(1) << hardhat->alignment);
+
+		blocksize = UINT64_C(1) << hardhat->blocksize;
+
+		data_off = off + reclen;
+		if(data_off + datapad < data_off)
+			return false;
+		data_off += datapad;
+
+		if(data_off + datalen < data_off)
+			return false;
+
+		start = data_off % blocksize;
+		end = blocksize - -(data_off + datalen) % blocksize;
+
+	    if(start > end) {
+			data_extrapad = -data_off % blocksize;
+			if(datapad + data_extrapad < datapad)
+				return false;
+			datapad += data_extrapad;
+		}
+
 		if(reclen + datapad < reclen)
 			return false;
 
@@ -266,7 +290,6 @@ static inline bool HHE(hhc_fetch_entry)(hardhat_cursor_t *c) {
 		datapad = 0;
 	}
 
-	datalen = u32read(rec);
 	if(reclen + datalen < reclen)
 		return false;
 
