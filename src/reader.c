@@ -118,6 +118,12 @@ export hardhat_t *hardhat_open(const char *filename) {
 		return NULL;
 	}
 
+	if(st.st_size > INT64_MAX) {
+		close(fd);
+		errno = EFBIG;
+		return NULL;
+	}
+
 	if(st.st_size < (off_t)sizeof(struct hardhat)) {
 		close(fd);
 		errno = EPROTO;

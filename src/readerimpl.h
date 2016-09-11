@@ -64,9 +64,9 @@ static bool HHE(hhc_validate)(hardhat_t *hardhat, const struct stat *st) {
 		if(HHE(hhc_calchash)(hardhat, (const void *)hardhat, sizeof *hardhat - 4)
 				!= u32(hardhat->checksum))
 			return false;
-		if(hardhat->alignment >= 64)
+		if(hardhat->alignment >= 32)
 			return false;
-		if(hardhat->blocksize >= 64)
+		if(hardhat->blocksize >= 32)
 			return false;
 	} else {
 		return false;
@@ -217,8 +217,9 @@ static void HHE(hardhat_debug_dump)(hardhat_t *hardhat) {
 
 /*
 **	Try to fetch a single entry into the (dummy) cursor object, taking
-**	extreme care to guard against integer overflow/wrap and pointers outside
-**	the memory mapped region.
+**	extreme care to guard against pointers outside the memory mapped region.
+**  We do not have to worry about overflow, all values are restricted to
+**  32 bits and the math is done in 64 bit.
 **
 **	Usage: fill in the hardhat and cur fields of the hardhat_cursor_t.
 **	This function will either return false (if an anomaly was detected) or
@@ -228,7 +229,7 @@ static inline bool HHE(hhc_fetch_entry)(hardhat_cursor_t *c) {
 	uint16_t keylen;
 	uint32_t recnum, index;
 	uint64_t off, reclen, data_start, data_end, datalen, datapad, blocksize;
-	uint64_t data_off, data_extrapad, start, end;
+	uint64_t data_off, start, end;
 	const uint8_t *rec, *buf;
 	const struct hardhat *hardhat;
 	const uint64_t *directory;
@@ -245,56 +246,35 @@ static inline bool HHE(hhc_fetch_entry)(hardhat_cursor_t *c) {
 	reclen = 6;
     data_start = u64(hardhat->data_start);
     data_end = u64(hardhat->data_end);
-	if(off < data_start || off + reclen < off || off + reclen > data_end || off % 4)
+	if(off < data_start || off + reclen > data_end || off % 4)
 		return false;
 
 	buf = (const uint8_t *)hardhat;
 	rec = buf + off;
+	datalen = u32read(rec);
 	keylen = u16read(rec + 4);
 	reclen += keylen;
-	if(off + reclen < off || off + reclen > data_end)
-		return false;
-
-	datalen = u32read(rec);
 
 	if(u32(hardhat->version) >= UINT32_C(3)) {
 		datapad = -(off + reclen) % (UINT64_C(1) << hardhat->alignment);
 
 		blocksize = UINT64_C(1) << hardhat->blocksize;
 
-		data_off = off + reclen;
-		if(data_off + datapad < data_off)
-			return false;
-		data_off += datapad;
-
-		if(data_off + datalen < data_off)
-			return false;
+		data_off = off + reclen + datapad;
 
 		start = data_off % blocksize;
 		end = blocksize - -(data_off + datalen) % blocksize;
 
-	    if(start > end) {
-			data_extrapad = -data_off % blocksize;
-			if(datapad + data_extrapad < datapad)
-				return false;
-			datapad += data_extrapad;
-		}
-
-		if(reclen + datapad < reclen)
-			return false;
+	    if(start > end)
+			datapad += -data_off % blocksize;
 
 		reclen += datapad;
-		if(off + reclen < off || off + reclen > data_end)
-			return false;
 	} else {
 		datapad = 0;
 	}
 
-	if(reclen + datalen < reclen)
-		return false;
-
 	reclen += datalen;
-	if(off + reclen < off || off + reclen > data_end)
+	if(off + reclen > data_end)
 		return false;
 
 	c->key = rec + 6;
