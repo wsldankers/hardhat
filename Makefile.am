@@ -16,6 +16,10 @@ lib_libhardhat_la_SOURCES = src/hashtable.c src/hashtable.h src/layout.h src/mak
 lib_libhardhat_la_LDFLAGS = -Wl,--version-script,$(srcdir)/libhardhat.ver
 lib_libhardhat_la_LIBADD = -lrt
 
+if !HAVE_QSORT_R
+lib_libhardhat_la_SOURCES += src/qsort_r.c
+endif
+
 hh_HEADERS = src/layout.h src/reader.h src/hashtable.h src/maker.h
 hhdir = $(pkgincludedir)
 

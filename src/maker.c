@@ -18,8 +18,6 @@
 
 ******************************************************************************/
 
-#include "config.h"
-
 #include <stdio.h>
 #include <stdbool.h>
 #include <stdarg.h>
@@ -692,17 +690,15 @@ export bool hardhat_maker_parents(hardhat_maker_t *hhm, const void *data, uint32
 	return true;
 }
 
-static hardhat_maker_t *qsort_data;
-
 /* Compare two entries from the hashtable by fetching their key values
 	and comparing them using hardhat_cmp().
 	Empty hash values always come last. */
-static int qsort_directory_cmp(const void *a, const void *b) {
+static int qsort_directory_cmp(const void *a, const void *b, void *hhm) {
 	const uint8_t *ar, *br;
 	uint32_t ad, bd;
 	const uint64_t *recs;
 
-	if(!qsort_data)
+	if(((hardhat_maker_t *)hhm)->failed)
 		return 0;
 
 	ad = ((const struct hashentry *)a)->data;
@@ -713,32 +709,26 @@ static int qsort_directory_cmp(const void *a, const void *b) {
 	else if(bd == EMPTYHASH)
 		return -1;
 
-	recs = qsort_data->recbuf;
+	recs = ((hardhat_maker_t *)hhm)->recbuf;
 
-	ar = hhm_getrec(qsort_data, recs[ad]);
-	if(!ar) {
-		qsort_data = NULL;
+	ar = hhm_getrec(hhm, recs[ad]);
+	if(!ar)
 		return 0;
-	}
 
-	br = hhm_getrec(qsort_data, recs[bd]);
-	if(!br) {
-		qsort_data = NULL;
+	br = hhm_getrec(hhm, recs[bd]);
+	if(!br)
 		return 0;
-	}
 
 	/* get the first record again: the memory mapping may have moved */
-	ar = hhm_getrec(qsort_data, recs[ad]);
-	if(!ar) {
-		qsort_data = NULL;
+	ar = hhm_getrec(hhm, recs[ad]);
+	if(!ar)
 		return 0;
-	}
 
 	return hardhat_cmp(ar + 6, u16read(ar + 4), br + 6, u16read(br + 4));
 }
 
 /* Compare hash entries by hash value, with string comparison as a tie breaker. */
-static int qsort_hash_cmp(const void *a, const void *b) {
+static int qsort_hash_cmp(const void *a, const void *b, void *hhm) {
 	const uint8_t *ar, *br;
 	uint32_t ad, bd;
 	uint16_t al, bl;
@@ -749,37 +739,31 @@ static int qsort_hash_cmp(const void *a, const void *b) {
 	bd = ((const struct hashentry *)b)->hash;
 
 	if(ad == bd) {
-		if(!qsort_data)
+		if(((hardhat_maker_t *)hhm)->failed)
 			return 0;
 
 		ad = ((const struct hashentry *)a)->data;
 		bd = ((const struct hashentry *)b)->data;
 
 		if(ad == EMPTYHASH)
-			return bd == EMPTYHASH ? 0 : 1;
+			return bd != EMPTYHASH;
 		else if(bd == EMPTYHASH)
 			return -1;
 
-		recs = qsort_data->recbuf;
+		recs = ((hardhat_maker_t *)hhm)->recbuf;
 
-		ar = hhm_getrec(qsort_data, recs[ad]);
-		if(!ar) {
-			qsort_data = NULL;
+		ar = hhm_getrec(hhm, recs[ad]);
+		if(!ar)
 			return 0;
-		}
 
-		br = hhm_getrec(qsort_data, recs[bd]);
-		if(!br) {
-			qsort_data = NULL;
+		br = hhm_getrec(hhm, recs[bd]);
+		if(!br)
 			return 0;
-		}
 
 		/* get the first record again: the memory mapping may have moved */
-		ar = hhm_getrec(qsort_data, recs[ad]);
-		if(!ar) {
-			qsort_data = NULL;
+		ar = hhm_getrec(hhm, recs[ad]);
+		if(!ar)
 			return 0;
-		}
 
 		al = u16read(ar + 4);
 		bl = u16read(br + 4);
@@ -816,6 +800,10 @@ static size_t common_parents(const uint8_t *a, size_t al, const uint8_t *b, size
 	return cl;
 }
 
+#ifndef HAVE_QSORT_R
+extern void qsort_r(void *, size_t, size_t, int (*)(const void *, const void *, void *), void *);
+#endif
+
 /* Finish up the database by writing the indexes and the superblock */
 export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 	int fd;
@@ -833,15 +821,12 @@ export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 
 	num = hhm->recnum;
 	hhm->superblock.data_end = hhm->off;
-	qsort_data = hhm;
 
 	/* Sort the hashtable in directory order */
 	ht = hhm->hashtable;
-	qsort(ht->buf, ht->size, sizeof *ht->buf, qsort_directory_cmp);
-	if(!qsort_data) {
-		hhm->failed = true;
+	qsort_r(ht->buf, ht->size, sizeof *ht->buf, qsort_directory_cmp, hhm);
+	if(hhm->failed)
 		return false;
-	}
 
 	if(!hhm_db_pad(hhm, num * sizeof *dir, sizeof *dir))
 		return false;
@@ -868,7 +853,9 @@ export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 	memcpy(dir, hhm->window + hhm->superblock.directory_start, sizeof *dir * num);
 
 	/* Now sort the hashtable again, this time on hash value */
-	qsort(ht->buf, num, sizeof *ht->buf, qsort_hash_cmp);
+	qsort_r(ht->buf, num, sizeof *ht->buf, qsort_hash_cmp, hhm);
+	if(hhm->failed)
+		return false;
 
 	if(!hhm_db_pad(hhm, num * sizeof *ht->buf, sizeof *ht->buf))
 		return false;
@@ -923,7 +910,9 @@ export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 	}
 
 	/* Write out the prefix list as a hash table */
-	qsort(ht->buf, pfxnum, sizeof *ht->buf, qsort_hash_cmp);
+	qsort_r(ht->buf, pfxnum, sizeof *ht->buf, qsort_hash_cmp, hhm);
+	if(hhm->failed)
+		return false;
 
 	if(!hhm_db_pad(hhm, pfxnum  * sizeof *ht->buf, sizeof *ht->buf))
 		return false;

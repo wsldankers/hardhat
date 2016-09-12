@@ -18,8 +18,6 @@
 
 ******************************************************************************/
 
-#include "config.h"
-
 #include <stdint.h>
 #include <inttypes.h>
 #include <stdbool.h>
