@@ -77,11 +77,11 @@ struct hardhat_maker {
 	char *error;
 	/* If this boolean is set, database creation has failed and
 		cannot be restarted or continued. */
-	bool failed:1;
+	bool failed;
 	/* Entries have been added, so the alignment is fixed now */
-	bool started:1;
+	bool started;
 	/* Database is completed and cannot be modified anymore */
-	bool finished:1;
+	bool finished;
 	/* The superblock, as it will be created at the end */
 	struct hardhat superblock;
 };
