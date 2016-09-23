@@ -32,7 +32,7 @@ int main(void) {
 	if(!tap(hhm, NULL, "create a hardhat_maker"))
 		bail("no hardhat_maker object: %m");
 
-	for(u = 0; u < 100; u++) {
+	for(u = 0; u < 10; u++) {
 		sprintf(key, "%u", u);
 		sprintf(data, "%x", u);
 		tap(hardhat_maker_add(hhm, key, strlen(key), data, strlen(data)), NULL, "add an entry");
@@ -47,7 +47,7 @@ int main(void) {
 	tap(hh, NULL, "open the hardhat for reading");
 
 	if(hh) {
-		for(u = 0; u < 100; u++) {
+		for(u = 0; u < 10; u++) {
 			sprintf(key, "%u", u);
 			sprintf(data, "%x", u);
 			hhc = hardhat_cursor(hh, key, strlen(key));
