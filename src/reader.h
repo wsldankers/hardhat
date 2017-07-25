@@ -47,7 +47,7 @@ typedef struct hardhat_cursor {
 	uint32_t datalen;
 	/* Length of current data */
 	uint16_t keylen;
-	/* Length of the prefix passwd to hardhat_cursor(). Private! */
+	/* Length of the prefix passed to hardhat_cursor(). Private! */
 	uint16_t prefixlen;
 	/* Whether the first entry has been returned. */
 	bool started;
