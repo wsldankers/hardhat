@@ -140,13 +140,13 @@ static bool HHE(hhc_validate)(hardhat_t *hardhat, const struct stat *st) {
 }
 
 static uint64_t HHE(hardhat_alignment)(hardhat_t *hardhat) {
-    return u32(hardhat->version) < 3
+	return u32(hardhat->version) < 3
 		? UINT64_C(1)
 		: UINT64_C(1) << hardhat->alignment;
 }
 
 static uint64_t HHE(hardhat_blocksize)(hardhat_t *hardhat) {
-    return u32(hardhat->version) < 3
+	return u32(hardhat->version) < 3
 		? UINT64_C(4096)
 		: UINT64_C(1) << hardhat->blocksize;
 }
@@ -244,8 +244,8 @@ static inline bool HHE(hhc_fetch_entry)(hardhat_cursor_t *c) {
 	directory = (const uint64_t *)(buf + u64(hardhat->directory_start));
 	off = u64(directory[index]);
 	reclen = 6;
-    data_start = u64(hardhat->data_start);
-    data_end = u64(hardhat->data_end);
+	data_start = u64(hardhat->data_start);
+	data_end = u64(hardhat->data_end);
 	if(off < data_start || off + reclen > data_end || off % 4)
 		return false;
 
@@ -265,7 +265,7 @@ static inline bool HHE(hhc_fetch_entry)(hardhat_cursor_t *c) {
 		start = data_off % blocksize;
 		end = blocksize - -(data_off + datalen) % blocksize;
 
-	    if(start > end)
+		if(start > end)
 			datapad += -data_off % blocksize;
 
 		reclen += datapad;

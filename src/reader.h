@@ -25,14 +25,14 @@
 #include <stdbool.h>
 #include <stdlib.h>
 
-/* Opaque structure for open hardhat databases */
+/*	Opaque structure for open hardhat databases */
 typedef const struct hardhat hardhat_t;
 
-/* Cursor for lookups. All fields are read-only, some are private.
-   This structure represents a single entry in the database, but
-   also contains enough information about the query that found it
-   to act as an iterator. See hardhat_cursor() and hardhat_fetch().
-   Private values are subject to change without notice. */
+/*	Cursor for lookups. All fields are read-only, some are private.
+	This structure represents a single entry in the database, but
+	also contains enough information about the query that found it
+	to act as an iterator. See hardhat_cursor() and hardhat_fetch().
+	Private values are subject to change without notice. */
 typedef struct hardhat_cursor {
 	/* Pointer to hardhat handle. */
 	hardhat_t *hardhat;
@@ -56,41 +56,41 @@ typedef struct hardhat_cursor {
 	uint8_t prefix[1];
 } hardhat_cursor_t;
 
-/* Open a hardhat database for querying. Returns NULL (and sets errno)
-   on failure. EPROTO means that the database is invalid, corrupted or
-   otherwise unusable. */
+/*	Open a hardhat database for querying. Returns NULL (and sets errno)
+	on failure. EPROTO means that the database is invalid, corrupted or
+	otherwise unusable. */
 extern hardhat_t *hardhat_open(const char *filename);
 extern hardhat_t *hardhat_openat(int dirfd, const char *filename);
 #define HAVE_HARDHAT_OPENAT
 
-/* Query the alignment for the data entries in this database. */
+/*	Query the alignment for the data entries in this database. */
 extern uint64_t hardhat_alignment(hardhat_t *);
 #define HAVE_HARDHAT_ALIGNMENT
 
-/* Query the blocksize used when writing this database. */
+/*	Query the blocksize used when writing this database. */
 extern uint64_t hardhat_blocksize(hardhat_t *);
 #define HAVE_HARDHAT_BLOCKSIZE
 
-/* Fill the buffer cache so that subsequent accesses are not limited by
-   rotational storage seektimes. May block. */
+/*	Fill the buffer cache so that subsequent accesses are not limited by
+	rotational storage seektimes. May block. */
 extern void hardhat_precache(hardhat_t *, bool data);
 
-/* Close the hardhat database. */
+/*	Close the hardhat database. */
 extern void hardhat_close(hardhat_t *hardhat);
 
 extern void hardhat_debug_dump(hardhat_t *hardhat);
 
-/* Search for an entry. If an error occurs, NULL is returned and errno set.
-   Otherwise a hardhat_cursor_t structure is returned, with the key, data,
-   keylen, and datalen values set.
-   If the entry was not found, the key and data fields are NULL. */
+/*	Search for an entry. If an error occurs, NULL is returned and errno set.
+	Otherwise a hardhat_cursor_t structure is returned, with the key, data,
+	keylen, and datalen values set.
+	If the entry was not found, the key and data fields are NULL. */
 extern hardhat_cursor_t *hardhat_cursor(hardhat_t *, const void *prefix, uint16_t prefixlen);
 
-/* Return the next entry for a cursor. This will return only entries that
-   have names strictly underneath the searched path. If recursive is false,
-   only direct descendents will be returned. Returns false (and sets key
-   and data to NULL) if no more entries could be found.
-   Example usage for a shallow listing of the foo directory:
+/*	Return the next entry for a cursor. This will return only entries that
+	have names strictly underneath the searched path. If recursive is false,
+	only direct descendents will be returned. Returns false (and sets key
+	and data to NULL) if no more entries could be found.
+	Example usage for a shallow listing of the foo directory:
 
 	hardhat_cursor_t *c = hardhat_cursor(hh, "foo", 3);
 	while(hardhat_fetch(c, false)) {
@@ -98,19 +98,19 @@ extern hardhat_cursor_t *hardhat_cursor(hardhat_t *, const void *prefix, uint16_
 		putchar('\n');
 	}
 
-   Works even the parent node itself was not found. */
+	Works even the parent node itself was not found. */
 extern bool hardhat_fetch(hardhat_cursor_t *c, bool recursive);
 
-/* Frees the cursor and associated storage */
+/*	Frees the cursor and associated storage */
 extern void hardhat_cursor_free(hardhat_cursor_t *c);
 
-/* Utility function: normalize a path according to hardhat's rules.
-   Returns the size of the result string. The destination buffer should
-   be at least as large as the source buffer. In place conversions are
-   supported (simply pass the same pointer for src and dst. */
+/*	Utility function: normalize a path according to hardhat's rules.
+	Returns the size of the result string. The destination buffer should
+	be at least as large as the source buffer. In place conversions are
+	supported (simply pass the same pointer for src and dst. */
 extern size_t hardhat_normalize(void *dst, const void *src, size_t size);
 
-/* Utility function: compare two paths according to hardhat's rules. */
+/*	Utility function: compare two paths according to hardhat's rules. */
 extern int hardhat_cmp(const void *a, size_t al, const void *b, size_t bl);
 
 #endif
