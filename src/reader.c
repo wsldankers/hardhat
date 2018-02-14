@@ -37,6 +37,10 @@
 #include "reader.h"
 #include "murmur3.h"
 
+#ifndef O_LARGEFILE
+#define O_LARGEFILE 0
+#endif
+
 #define export __attribute__((visibility("default")))
 
 #define CURSOR_NONE (UINT32_MAX)
@@ -107,7 +111,7 @@ export hardhat_t *hardhat_open(const char *filename) {
 	int fd, err;
 	struct stat st;
 
-	fd = open(filename, O_RDONLY|O_NOCTTY|O_LARGEFILE);
+	fd = open(filename, O_RDONLY|O_NOCTTY|O_LARGEFILE|O_CLOEXEC);
 	if(fd == -1)
 		return NULL;
 

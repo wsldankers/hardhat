@@ -38,6 +38,10 @@
 #include "hashtable.h"
 #include "layout.h"
 
+#ifndef O_LARGEFILE
+#define O_LARGEFILE 0
+#endif
+
 /******************************************************************************
 
 	Module to create a hardhat database.
@@ -99,10 +103,6 @@ static const hardhat_maker_t hardhat_maker_0 = {
 	.recbufsize = 65536,
 	.window = MAP_FAILED,
 };
-
-#ifndef O_LARGEFILE
-#define O_LARGEFILE 0
-#endif
 
 /* Return the error (if any) or an empty string (but never NULL) */
 export const char *hardhat_maker_error(hardhat_maker_t *hhm) {
@@ -520,7 +520,7 @@ export hardhat_maker_t *hardhat_maker_new(const char *filename) {
 		return NULL;
 	}
 
-	hhm->fd = open(filename, O_RDWR|O_CREAT|O_LARGEFILE|O_NOCTTY, 0666);
+	hhm->fd = open(filename, O_RDWR|O_CREAT|O_LARGEFILE|O_NOCTTY|O_CLOEXEC, 0666);
 	if(hhm->fd == -1) {
 		err = errno;
 		hardhat_maker_free(hhm);
