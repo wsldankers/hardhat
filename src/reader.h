@@ -60,6 +60,7 @@ typedef struct hardhat_cursor {
    on failure. EPROTO means that the database is invalid, corrupted or
    otherwise unusable. */
 extern hardhat_t *hardhat_open(const char *filename);
+extern hardhat_t *hardhat_openat(int dirfd, const char *filename);
 
 /* Query the alignment for the data entries in this database. */
 extern uint64_t hardhat_alignment(hardhat_t *);

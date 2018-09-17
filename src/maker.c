@@ -478,6 +478,10 @@ static const uint8_t *hhm_getrec(hardhat_maker_t *hhm, uint64_t off) {
 /* Allocate and initialize a hardhat_maker_t structure.
 	Returns NULL on failure, with errno set to the problem. */
 export hardhat_maker_t *hardhat_maker_new(const char *filename) {
+	return hardhat_maker_newat(AT_CWD, filename, 0666);
+}
+
+export hardhat_maker_t *hardhat_maker_newat(int dirfd, const char *filename, int mode) {
 	hardhat_maker_t *hhm;
 	int err;
 
@@ -520,7 +524,7 @@ export hardhat_maker_t *hardhat_maker_new(const char *filename) {
 		return NULL;
 	}
 
-	hhm->fd = open(filename, O_RDWR|O_CREAT|O_LARGEFILE|O_NOCTTY|O_CLOEXEC, 0666);
+	hhm->fd = openat(dirfd, filename, O_RDWR|O_CREAT|O_LARGEFILE|O_NOCTTY|O_CLOEXEC, mode);
 	if(hhm->fd == -1) {
 		err = errno;
 		hardhat_maker_free(hhm);
@@ -554,6 +558,7 @@ export hardhat_maker_t *hardhat_maker_new(const char *filename) {
 
 	return hhm;
 }
+
 
 /* Add an entry to the database (if it doesn't exist yet).
 	Returns true on success (or if the entry already existed!)

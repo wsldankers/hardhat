@@ -107,11 +107,15 @@ static inline uint64_t u64(uint64_t x) {
 /* keep the other-endian #defines so we can use them below */
 
 export hardhat_t *hardhat_open(const char *filename) {
+	return hardhat_openat(AT_CWD, filename);
+}
+
+export hardhat_t *hardhat_openat(int dirfd, const char *filename) {
 	void *buf;
 	int fd, err;
 	struct stat st;
 
-	fd = open(filename, O_RDONLY|O_NOCTTY|O_LARGEFILE|O_CLOEXEC);
+	fd = openat(dirfd, filename, O_RDONLY|O_NOCTTY|O_LARGEFILE|O_CLOEXEC);
 	if(fd == -1)
 		return NULL;
 
