@@ -478,7 +478,7 @@ static const uint8_t *hhm_getrec(hardhat_maker_t *hhm, uint64_t off) {
 /* Allocate and initialize a hardhat_maker_t structure.
 	Returns NULL on failure, with errno set to the problem. */
 export hardhat_maker_t *hardhat_maker_new(const char *filename) {
-	return hardhat_maker_newat(AT_CWD, filename, 0666);
+	return hardhat_maker_newat(AT_FDCWD, filename, 0666);
 }
 
 export hardhat_maker_t *hardhat_maker_newat(int dirfd, const char *filename, int mode) {
