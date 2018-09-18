@@ -42,6 +42,8 @@ extern bool hardhat_maker_fatal(hardhat_maker_t *hhm);
    Returns NULL (and sets errno) on error. */
 extern hardhat_maker_t *hardhat_maker_new(const char *filename);
 extern hardhat_maker_t *hardhat_maker_newat(int dirfd, const char *filename, int mode);
+#define HAVE_HARDHAT_MAKER_NEWAT
+#define HAVE_HARDHAT_MAKER_OPENAT
 
 /* Configure the alignment to use for this database.
    The value determines how stored values are aligned.
