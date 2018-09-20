@@ -35,9 +35,6 @@ AC_CHECK_LIB(rt, clock_gettime, [true], [
 	exit 1
 ])
 
-AC_CHECK_FUNCS([fpurge __fpurge])
-AC_CHECK_HEADERS([stdio_ext.h])
-
 AC_CHECK_FUNCS([qsort_r], [have_qsort_r=true], [have_qsort_r=false])
 AM_CONDITIONAL([HAVE_QSORT_R], [$have_qsort_r])
 

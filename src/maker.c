@@ -30,9 +30,6 @@
 #include <errno.h>
 #include <time.h>
 #include <sys/mman.h>
-#if defined(HAVE___FPURGE) && defined(HAVE_STDIO_EXT_H)
-#include <stdio_ext.h>
-#endif
 
 #include "maker.h"
 #include "hashtable.h"
