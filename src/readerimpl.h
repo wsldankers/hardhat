@@ -421,7 +421,7 @@ static void HHE(hhc_hash_find)(hardhat_cursor_t *c) {
 	}
 }
 
-static uint32_t HHE(hhc_prefix_find)(hardhat_t *hardhat, const void *str, uint16_t len) {
+static uint32_t HHE(hhc_prefix_find)(hardhat_t *hardhat, const void *str, uint16_t len, bool recursive) {
 	hardhat_cursor_t lookup;
 	const struct hashentry *he, *ht;
 	uint32_t u, hp, hash, he_hash, he_data, hashnum, recnum, upper, lower, upper_hash, lower_hash;
@@ -500,16 +500,18 @@ static uint32_t HHE(hhc_prefix_find)(hardhat_t *hardhat, const void *str, uint16
 			} else {
 				r = memcmp(lookup.key, str, len);
 				if(!r) {
-					/* check if the prefix we found is actually the first one */
-					if(!lookup.cur)
-						return 0;
+					if(recursive || !memchr(lookup.key + len, '/', lookup.keylen - len)) {
+						/* check if the prefix we found is actually the first one */
+						if(!lookup.cur)
+							return 0;
 
-					lookup.cur--;
-					if(!HHE(hhc_fetch_entry)(&lookup))
-						return CURSOR_NONE;
-					if(lookup.keylen < len || memcmp(lookup.key, str, len))
-						return lookup.cur + 1;
-					/* bummer, it isn't the first one. proceed as usual */
+						lookup.cur--;
+						if(!HHE(hhc_fetch_entry)(&lookup))
+							return CURSOR_NONE;
+						if(lookup.keylen < len || memcmp(lookup.key, str, len))
+							return lookup.cur + 1;
+						/* bummer, it isn't the first one. proceed as usual */
+					}
 				}
 				if(r < 0) {
 					/* found key is lexicographically smaller */
@@ -533,6 +535,11 @@ static uint32_t HHE(hhc_prefix_find)(hardhat_t *hardhat, const void *str, uint16
 			return CURSOR_NONE;
 	}
 
+	/* There may be multiple keys with the correct hash value.
+	** In older database versions, the keys were not sorted, so
+	** we need to search up and down to find the real key by
+	** comparing key values one by one. */
+
 	for(u = hp; u < hashnum; u++) {
 		he = ht + u;
 		he_hash = u32(he->hash);
@@ -541,6 +548,8 @@ static uint32_t HHE(hhc_prefix_find)(hardhat_t *hardhat, const void *str, uint16
 		lookup.cur = he_data = u32(he->data);
 		if(!HHE(hhc_fetch_entry)(&lookup))
 			return CURSOR_NONE;
+		if(lookup.keylen < len || memcmp(lookup.key, str, len) || (!recursive && memchr(lookup.key + len, '/', lookup.keylen - len)))
+			continue;
 		if(lookup.cur) {
 			/* check if the prefix we found is actually the first one */
 			lookup.cur--;
@@ -560,6 +569,8 @@ static uint32_t HHE(hhc_prefix_find)(hardhat_t *hardhat, const void *str, uint16
 		lookup.cur = he_data = u32(he->data);
 		if(!HHE(hhc_fetch_entry)(&lookup))
 			return CURSOR_NONE;
+		if(lookup.keylen < len || memcmp(lookup.key, str, len) || (!recursive && memchr(lookup.key + len, '/', lookup.keylen - len)))
+			continue;
 		if(lookup.cur) {
 			/* check if the prefix we found is actually the first one */
 			lookup.cur--;
@@ -616,7 +627,7 @@ static bool HHE(hardhat_fetch)(hardhat_cursor_t *c, bool recursive) {
 		}
 	} else {
 		/* hhc_prefix_find() validates the entry for us */
-		cur = HHE(hhc_prefix_find)(hardhat, c->prefix, c->prefixlen);
+		cur = HHE(hhc_prefix_find)(hardhat, c->prefix, c->prefixlen, recursive);
 	}
 
 	c->cur = cur;
