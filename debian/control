@@ -1,6 +1,6 @@
 Source: hardhat
 Section: libs
-Priority: extra
+Priority: optional
 Maintainer: Wessel Dankers <wsl@fruit.je>
 Build-Depends: debhelper (>= 7)
 Standards-Version: 3.7.2
