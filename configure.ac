@@ -1,5 +1,10 @@
 AC_PREREQ(2.59)
-AC_INIT(hardhat, 1.1.5, wsl-hardhat-bugs@fruit.je)
+AC_INIT(hardhat, m4_esyscmd_s([
+	read -r debian_version <debian/changelog
+	debian_version=${debian_version#*\(}
+	debian_version=${debian_version%%\)*}
+	echo "${debian_version%-*}"
+]), [wsl-hardhat-bugs@fruit.je])
 AM_INIT_AUTOMAKE([foreign subdir-objects dist-xz no-dist-gzip])
 
 AC_CONFIG_MACRO_DIR([m4])
@@ -12,7 +17,8 @@ AC_DEFINE(_XOPEN_SOURCE, 500, [needed for some calls])
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_PROG_CC
-AC_PROG_CC_C99
+# This adds -std=gnu99 which we do not want:
+#AC_PROG_CC_C99
 AC_PROG_INSTALL
 AC_PROG_LIBTOOL
 AC_SYS_LARGEFILE
@@ -42,7 +48,7 @@ MY_GCC_BUILTIN(bswap16, 0)
 MY_GCC_BUILTIN(bswap32, 0)
 MY_GCC_BUILTIN(bswap64, 0)
 
-AX_APPEND_FLAG([-Wall -Werror -Wstrict-aliasing -include src/config.h])
+AX_APPEND_FLAG([-std=c99 -pipe -fvisibility=hidden -Wall -Wextra -Wno-missing-field-initializers -Wstrict-aliasing -include src/config.h])
 
 AC_REQUIRE_AUX_FILE([tap-driver.sh])
 AC_CONFIG_FILES([Makefile])
