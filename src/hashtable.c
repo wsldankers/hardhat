@@ -143,12 +143,12 @@ uint64_t calchash64_fnv1a(const uint8_t *key, size_t len) {
 /* add a value at the first free slot of the hash */
 static void addhash_raw(struct hashtable *ht, uint32_t hash, uint32_t data) {
 	struct hashentry *buf;
-	uint32_t off, end;
+	uint32_t off, size;
 	buf = ht->buf;
-	end = ht->size;
-	off = hash % ht->size;
+	size = ht->size;
+	off = hash % size;
 	while(buf[off].data != EMPTYHASH)
-		if(++off > end)
+		if(++off >= size)
 			off = 0;
 	buf[off].hash = hash;
 	buf[off].data = data;

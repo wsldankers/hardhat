@@ -4,6 +4,7 @@ hardhat (1.2.0) UNRELEASED; urgency=medium
   * Defend against hash complexity attacks by falling back to
     binary search.
   * Bump database version number.
+  * Fix hashing bug.
 
  -- Wessel Dankers <wsl@fruit.je>  Sat, 10 Sep 2016 14:27:07 +0200
 
