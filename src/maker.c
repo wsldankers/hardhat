@@ -978,6 +978,7 @@ export void hardhat_maker_free(hardhat_maker_t *hhm) {
 	freehash(hhm->hashtable);
 	free(hhm->keybuf);
 	free(hhm->recbuf);
+	free(hhm->outbuf);
 	free(hhm->filename);
 	if(hhm->window != MAP_FAILED)
 		munmap(hhm->window, hhm->windowsize);
