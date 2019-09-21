@@ -136,7 +136,7 @@ export hardhat_t *hardhat_openat(int dirfd, const char *filename) {
 		return NULL;
 	}
 
-	buf = mmap(NULL, (size_t)st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+	buf = mmap(NULL, (size_t)st.st_size, PROT_READ, MAP_SHARED, fd, 0);
 	err = errno;
 	close(fd);
 	if(buf == MAP_FAILED) {
