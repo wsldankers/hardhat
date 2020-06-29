@@ -1,4 +1,4 @@
-hardhat (1.2.0) UNRELEASED; urgency=medium
+hardhat (1.2.0) stable; urgency=medium
 
   * Smarter padding.
   * Defend against hash complexity attacks by falling back to
