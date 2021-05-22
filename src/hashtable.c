@@ -44,80 +44,18 @@
 
 ******************************************************************************/
 
-/* hashtable size will always be at least twice the number of entries: */
-#define HASHSPACE 2
+#define START_ORDER ((order_t)8)
+#define MIN_FREE(size) ((size) >> 3)
+#define ENTRY_NOT_FOUND __SIZE_MAX__
 
-static const struct hashtable hashtable_0 = {0};
-
-/* 32-bit integer version of a square root */
-static uint32_t sqrt32(uint32_t u) {
-	uint32_t r, p;
-
-	if(u < 2)
-		return u;
-
-	r = p = u / 2;
-
-	do {
-		p = r;
-		r = (p + u / p) / 2;
-	} while(r < p);
-
-	return p;
-}
-
-/* naive prime test */
-static bool isprime(uint32_t u) {
-	uint32_t q;
-	for(q = sqrt32(u) + 1; q > 1; q--)
-		if(u % q == 0)
-			return false;
-	return true;
-}
-
-/* return a prime number that is strictly larger than u */
-uint32_t nextprime(uint32_t u) {
-	while(u < UINT32_MAX) {
-		if(isprime(u))
-			return u;
-		u++;
-	}
-
-	for(;;) {
-		if(isprime(u))
-			return u;
-		u--;
-	}
-
-	return u;
-}
-
-/* return a prime number that is strictly larger than 2^order */
-static uint32_t nextorderprime(int order) {
-	uint32_t u;
-
-	if(order > 31) {
-		u = UINT32_MAX;
-		while(!isprime(u))
-			u--;
-	} else {
-		u = (UINT32_C(1) << order) + UINT32_C(1);
-		while(!isprime(u))
-			u++;
-	}
-
-	return u;
-}
+static const struct hashtable hashtable_0 = {NULL, 0, START_ORDER};
+//static const struct hashentry hashentry_0 = {0, EMPTYHASH};
 
 /* hashing function (Fowler-Noll-Vo 1a) */
 uint32_t calchash_fnv1a(const uint8_t *key, size_t len) {
-	const uint8_t *e;
-	uint32_t h;
-
-	e = key + len;
-	for(h = UINT32_C(2166136261); key < e; key++)
+	uint32_t h = UINT32_C(2166136261);
+	for(const uint8_t *e = key + len; key < e; key++)
 		h = (h ^ *key) * UINT32_C(16777619);
-
 	return h;
 }
 
@@ -127,97 +65,126 @@ uint32_t calchash_murmur3(const uint8_t *key, size_t len, uint32_t seed) {
 	return hash;
 }
 
-/*
-uint64_t calchash64_fnv1a(const uint8_t *key, size_t len) {
-	const uint8_t *e;
-	uint64_t h;
-
-	e = key + len;
-	for(h = UINT64_C(14695981039346656037); key < e; key++)
-		h = (h ^ *key) * UINT64_C(1099511628211);
-
-	return h;
+static inline uint32_t size_to_mask(uint32_t size) {
+	return size - UINT32_C(1);
 }
-*/
 
 /* add a value at the first free slot of the hash */
-static void addhash_raw(struct hashtable *ht, uint32_t hash, uint32_t data) {
-	struct hashentry *buf;
-	uint32_t off, size;
-	buf = ht->buf;
-	size = ht->size;
-	off = hash % size;
-	while(buf[off].data != EMPTYHASH)
-		if(++off >= size)
-			off = 0;
-	buf[off].hash = hash;
-	buf[off].data = data;
+static void addhash_raw(struct hashtable *ht, uint32_t my_hash, uint32_t my_data) {
+	struct hashentry *entries = ht->entries;
+	order_t shift = order_to_shift(ht->order);
+	uint32_t mask = shift_to_mask(shift);
+	uint32_t offset = hash_to_offset(my_hash, shift);
+
+	for(uint32_t my_diff = 0;; my_diff++) {
+		struct hashentry *entry = entries + offset;
+		uint32_t their_data = entry->data;
+		if(their_data == EMPTYHASH) {
+			entry->hash = my_hash;
+			entry->data = my_data;
+			return;
+		}
+		if(my_data == their_data)
+			return;
+
+		uint32_t their_hash = entry->hash;
+		uint32_t their_diff = difference(offset, hash_to_offset(their_hash, shift), mask);
+		if(their_diff < my_diff) {
+			entry->hash = my_hash;
+			entry->data = my_data;
+			my_hash = their_hash;
+			my_data = their_data;
+			break;
+		}
+
+		offset = (offset + 1) & mask;
+	}
+
+	for(;;) {
+		offset = (offset + 1) & mask;
+		struct hashentry *entry = entries + offset;
+
+		uint32_t their_data = entry->data;
+		uint32_t their_hash = entry->hash;
+		entry->hash = my_hash;
+		entry->data = my_data;
+		if(their_data == EMPTYHASH)
+			break;
+		my_hash = their_hash;
+		my_data = their_data;
+	}
 }
 
+static inline struct hashentry *alloc_entries(uint32_t num) {
+	size_t len = (size_t)num * sizeof(struct hashentry);
+	struct hashentry *entries = malloc(len);
+	if(entries)
+		memset(entries, 255, len);
+	return entries;
+}
+
+#define free_entries free
+
 /* allocate a new hash table and copy the old elements over */
-static bool rehash(struct hashtable *ht) {
-	uint32_t size, off;
-	struct hashentry *buf;
-
-	size = ht->size;
-	buf = ht->buf;
-
-	if(ht->order > 32)
+static bool rehash(struct hashtable *ht, order_t new_order) {
+	struct hashentry *new_entries = alloc_entries(order_to_size(new_order));
+	if(!new_entries)
 		return false;
 
-	ht->order++;
-	ht->size = nextorderprime(ht->order);
-	ht->limit = ht->size / HASHSPACE;
+	//fprintf(stderr, "resized to %zd\n", order_to_size(new_order));
 
-	ht->buf = malloc(ht->size * sizeof *ht->buf);
-	if(!ht->buf) {
-		free(buf);
-		return false;
+	struct hashentry *old_entries = ht->entries;
+	order_t old_order = ht->order;
+	ht->entries = new_entries;
+	ht->order = new_order;
+
+	uint32_t old_size = order_to_size(old_order);
+	for(uint32_t offset = 0; offset < old_size; offset++) {
+		struct hashentry *entry = old_entries + offset;
+		uint32_t data = entry->data;
+		if(data != EMPTYHASH)
+			addhash_raw(ht, entry->hash, data);
 	}
-	memset(ht->buf, 255, ht->size * sizeof *ht->buf);
 
-	for(off = 0; off < size; off++)
-		if(buf[off].data != EMPTYHASH)
-			addhash_raw(ht, buf[off].hash, buf[off].data);
+	free_entries(old_entries);
 
-	free(buf);
-		
 	return true;
 }
 
 /* add an element and check if the hash table hasn't become too large */
 bool addhash(struct hashtable *ht, uint32_t hash, uint32_t data) {
+	uint32_t fill = ht->fill + 1;
+	order_t order = ht->order;
+
+	size_t size = order_to_size(order);
+	if(fill > size - MIN_FREE(size) && !rehash(ht, order + 1))
+		return false;
+
 	addhash_raw(ht, hash, data);
-	if(++ht->fill > ht->limit)
-		return rehash(ht);
+	ht->fill = fill;
+
 	return true;
 }
 
 /* allocate and initialize the hash table */
 struct hashtable *newhash(void) {
-	struct hashtable *ht;
-
-	ht = malloc(sizeof *ht);
-	if(!ht)
-		return NULL;
-	*ht = hashtable_0;
-	ht->order = 16;
-	ht->size = nextorderprime(ht->order);
-	ht->limit = ht->size / HASHSPACE;
-
-	ht->buf = malloc(ht->size * sizeof *ht->buf);
-	if(!ht->buf) {
-		free(ht);
-		return NULL;
+	struct hashtable *ht = malloc(sizeof *ht);
+	if(ht) {
+		*ht = hashtable_0;
+		struct hashentry *entries = alloc_entries(order_to_size(ht->order));
+		if(entries) {
+			ht->entries = entries;
+		} else {
+			free(ht);
+			ht = NULL;
+		}
 	}
-	memset(ht->buf, 255, ht->size * sizeof *ht->buf);
-
 	return ht;
 }
 
 void freehash(struct hashtable *ht) {
-	if(!ht)
-		return;
-	free(ht->buf);
-	free(ht);
+	if(ht) {
+		free_entries(ht->entries);
+		free(ht);
+	}
 }

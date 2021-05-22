@@ -28,21 +28,42 @@ struct hashentry {
 	uint32_t data;
 };
 
+typedef uint32_t order_t;
+
 struct hashtable {
-	struct hashentry *buf;
+	struct hashentry *entries;
 	uint32_t fill;
-	uint32_t limit;
-	uint32_t size;
-	int order;
+	order_t order;
 };
 
 #define EMPTYHASH UINT32_MAX
+#define PHI UINT32_C(2654435769)
+#define THEORY 1
 
 extern uint32_t calchash_fnv1a(const uint8_t *key, size_t len);
 extern uint32_t calchash_murmur3(const uint8_t *key, size_t len, uint32_t seed);
-extern uint32_t nextprime(uint32_t u);
 extern struct hashtable *newhash(void);
 extern bool addhash(struct hashtable *ht, uint32_t hash, uint32_t data);
 extern void freehash(struct hashtable *ht);
+
+static inline order_t order_to_shift(order_t order) {
+	return 32 - order;
+}
+
+static inline uint32_t shift_to_mask(order_t shift) {
+	return ~UINT32_C(0) >> shift;
+}
+
+static inline uint32_t order_to_size(order_t order) {
+	return UINT32_C(1) << order;
+}
+
+static inline uint32_t hash_to_offset(uint32_t hash, order_t shift) {
+	return (hash * PHI) >> shift;
+}
+
+static inline uint32_t difference(uint32_t a, uint32_t b, uint32_t mask) {
+	return (a - b) & mask;
+}
 
 #endif

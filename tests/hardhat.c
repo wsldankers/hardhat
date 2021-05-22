@@ -44,6 +44,7 @@ int main(void) {
 	hardhat_maker_free(hhm);
 
 	hh = hardhat_open(filename);
+	free(filename);
 	tap(hh, NULL, "open the hardhat for reading");
 
 	if(hh) {
@@ -62,9 +63,13 @@ int main(void) {
 				}
 				putchar('\n');
 			}
+			hardhat_cursor_free(hhc);
 		}
 	}
 
 	printf("1..%u\n", testcounter);
+
+	hardhat_close(hh);
+
 	return 0;
 }

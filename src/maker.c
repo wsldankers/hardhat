@@ -561,12 +561,6 @@ export hardhat_maker_t *hardhat_maker_newat(int dirfd, const char *filename, int
 	Returns true on success (or if the entry already existed!)
 	Returns false on error. */
 export bool hardhat_maker_add(hardhat_maker_t *hhm, const void *key, uint16_t keylen, const void *data, uint32_t datalen) {
-	uint32_t hash, hp, value;
-	uint64_t off;
-	struct hashtable *ht;
-	const uint8_t *old;
-	void *buf;
-
 	if(!hhm || hhm->failed || hhm->finished) {
 		errno = EINVAL;
 		return false;
@@ -589,32 +583,45 @@ export bool hardhat_maker_add(hardhat_maker_t *hhm, const void *key, uint16_t ke
 
 	/* Check if the entry isn't already in the hash table.
 		If it is, return true. If not, add it and continue. */
-	hash = calchash_murmur3(key, (size_t)keylen, hhm->superblock.hashseed);
-	ht = hhm->hashtable;
-	hp = hash % ht->size;
-	for(;;) {
-		value = ht->buf[hp].data;
-		if(value == EMPTYHASH) {
-			if(!addhash(ht, hash, hhm->recnum)) {
-				if(hhm->error != enomem) {
-					free(hhm->error);
-					hhm->error = enomem;
-				}
-				hhm->failed = true;
-				return false;
-			}
-			break;
-		}
+	uint32_t reference_hash = calchash_murmur3(key, (size_t)keylen, hhm->superblock.hashseed);
+	struct hashtable *ht = hhm->hashtable;
+	struct hashentry *entries = ht->entries;
+	order_t shift = order_to_shift(ht->order);
+	uint32_t mask = shift_to_mask(shift);
+	uint32_t offset = hash_to_offset(reference_hash, shift);
 
-		if(ht->buf[hp].hash == hash) {
-			old = hhm_getrec(hhm, hhm->recbuf[value]);
+	for(uint32_t my_diff = 0;; my_diff++) {
+		struct hashentry *entry = entries + offset;
+		uint32_t candidate_data = entry->data;
+		if(candidate_data == EMPTYHASH)
+			break;
+
+		uint32_t candidate_hash = entry->hash;
+		if(reference_hash == candidate_hash) {
+			const uint8_t *old = hhm_getrec(hhm, hhm->recbuf[candidate_data]);
 			if(!old)
 				return false;
 			if(u16read(old + 4) == keylen && !memcmp(old + 6, key, keylen))
 				return true;
 		}
-		if(++hp >= ht->size)
-			hp = 0;
+
+#if THEORY
+		// Faster in theory, not necessarily in practice:
+		uint32_t candidate_diff = difference(offset, hash_to_offset(candidate_hash, shift), mask);
+		if(__builtin_expect(candidate_diff < my_diff, 1))
+			break;
+#endif
+
+		offset = (offset + 1) & mask;
+	}
+
+	if(!addhash(ht, reference_hash, hhm->recnum)) {
+		if(hhm->error != enomem) {
+			free(hhm->error);
+			hhm->error = enomem;
+		}
+		hhm->failed = true;
+		return false;
 	}
 
 	hhm->started = true;
@@ -625,7 +632,7 @@ export bool hardhat_maker_add(hardhat_maker_t *hhm, const void *key, uint16_t ke
 	if(!hhm_db_pad(hhm, (size_t)6 + (size_t)datalen, 4))
 		return false;
 
-	off = hhm->off;
+	uint64_t off = hhm->off;
 
 	/* Write out the entry to disk */
 
@@ -647,7 +654,7 @@ export bool hardhat_maker_add(hardhat_maker_t *hhm, const void *key, uint16_t ke
 	/* Add the entry offset to the list (resizing it as necessary) */
 	if(hhm->recnum == hhm->recbufsize) {
 		hhm->recbufsize *= 2;
-		buf = realloc(hhm->recbuf, hhm->recbufsize * sizeof *hhm->recbuf);
+		void *buf = realloc(hhm->recbuf, hhm->recbufsize * sizeof *hhm->recbuf);
 		if(!buf) {
 			if(hhm->error != enomem) {
 				free(hhm->error);
@@ -810,8 +817,8 @@ extern void qsort_r(void *, size_t, size_t, int (*)(const void *, const void *, 
 export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 	int fd;
 	struct hashtable *ht;
-	struct hashentry *he;
-	uint32_t i, num, pfxnum;
+	struct hashentry *he, *entries;
+	uint32_t i, num, pfxnum, size;
 	uint64_t *dir;
 	const uint8_t *cur, *prev, *end;
 	uint16_t curlen, prevlen, endlen;
@@ -826,7 +833,9 @@ export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 
 	/* Sort the hashtable in directory order */
 	ht = hhm->hashtable;
-	qsort_r(ht->buf, ht->size, sizeof *ht->buf, qsort_directory_cmp, hhm);
+	size = order_to_size(ht->order);
+	entries = ht->entries;
+	qsort_r(entries, size, sizeof *entries, qsort_directory_cmp, hhm);
 	if(hhm->failed)
 		return false;
 
@@ -838,7 +847,7 @@ export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 	/* Write out the directory using the sorted hashtable for ordering */
 	dir = hhm->recbuf;
 	for(i = 0; i < num; i++) {
-		he = ht->buf + i;
+		he = entries + i;
 
 		if(!hhm_db_append(hhm, dir + he->data, sizeof *dir))
 			return false;
@@ -855,18 +864,18 @@ export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 	memcpy(dir, hhm->window + hhm->superblock.directory_start, sizeof *dir * num);
 
 	/* Now sort the hashtable again, this time on hash value */
-	qsort_r(ht->buf, num, sizeof *ht->buf, qsort_hash_cmp, hhm);
+	qsort_r(entries, num, sizeof *entries, qsort_hash_cmp, hhm);
 	if(hhm->failed)
 		return false;
 
-	if(!hhm_db_pad(hhm, num * sizeof *ht->buf, sizeof *ht->buf))
+	if(!hhm_db_pad(hhm, num * sizeof *entries, sizeof *entries))
 		return false;
 
 	hhm->superblock.hash_start = hhm->off;
 
 	/* Write out the hashtable (which will serve as the primary
 		entry lookup table) */
-	if(!hhm_db_append(hhm, ht->buf, num * sizeof *ht->buf))
+	if(!hhm_db_append(hhm, entries, num * sizeof *entries))
 		return false;
 
 	hhm->superblock.hash_end = hhm->off;
@@ -890,10 +899,10 @@ export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 			end++;
 		
 			endlen = (uint16_t)(end - cur);
-			if(ht->size == pfxnum) {
-				ht->size *= 2;
-				he = realloc(ht->buf, ht->size * sizeof *ht->buf);
-				if(!he) {
+			if(size == pfxnum) {
+				size = size << 1;
+				entries = realloc(entries, size * sizeof *entries);
+				if(!entries) {
 					hhm->failed = true;
 					if(hhm->error != enomem) {
 						free(hhm->error);
@@ -901,9 +910,9 @@ export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 					}
 					return false;
 				}
-				ht->buf = he;
+				ht->entries = entries;
 			}
-			he = ht->buf + pfxnum++;
+			he = entries + pfxnum++;
 			he->hash = calchash_murmur3(cur, endlen, hhm->superblock.hashseed);
 			he->data = i;
 		}
@@ -912,16 +921,16 @@ export bool hardhat_maker_finish(hardhat_maker_t *hhm) {
 	}
 
 	/* Write out the prefix list as a hash table */
-	qsort_r(ht->buf, pfxnum, sizeof *ht->buf, qsort_hash_cmp, hhm);
+	qsort_r(entries, pfxnum, sizeof *entries, qsort_hash_cmp, hhm);
 	if(hhm->failed)
 		return false;
 
-	if(!hhm_db_pad(hhm, pfxnum  * sizeof *ht->buf, sizeof *ht->buf))
+	if(!hhm_db_pad(hhm, pfxnum * sizeof *entries, sizeof *entries))
 		return false;
 
 	hhm->superblock.prefix_start = hhm->off;
 
-	if(!hhm_db_append(hhm, ht->buf, pfxnum * sizeof *ht->buf))
+	if(!hhm_db_append(hhm, entries, pfxnum * sizeof *entries))
 		return false;
 
 	hhm->superblock.prefix_end = hhm->off;
